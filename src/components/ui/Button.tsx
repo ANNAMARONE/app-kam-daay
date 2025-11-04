@@ -8,6 +8,7 @@ import {
   TextStyle,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/Colors';
 
 interface ButtonProps {
@@ -19,7 +20,7 @@ interface ButtonProps {
   loading?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
-  icon?: React.ReactNode;
+  icon?: keyof typeof Ionicons.glyphMap;
   fullWidth?: boolean;
 }
 
@@ -51,6 +52,12 @@ export const Button: React.FC<ButtonProps> = ({
     textStyle,
   ];
 
+  const iconColor = variant === 'primary' ? Colors.secondary : 
+                    variant === 'secondary' || variant === 'success' ? Colors.white :
+                    Colors.secondary;
+
+  const iconSize = size === 'sm' ? 16 : size === 'lg' ? 22 : 18;
+
   return (
     <TouchableOpacity
       style={buttonStyles}
@@ -64,7 +71,14 @@ export const Button: React.FC<ButtonProps> = ({
         />
       ) : (
         <View style={styles.content}>
-          {icon && <View style={styles.iconContainer}>{icon}</View>}
+          {icon && (
+            <Ionicons
+              name={icon}
+              size={iconSize}
+              color={iconColor}
+              style={styles.icon}
+            />
+          )}
           <Text style={textStyles}>{title}</Text>
         </View>
       )}
@@ -87,10 +101,10 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
   },
-  iconContainer: {
-    marginRight: 4,
+  icon: {
+    marginRight: 8,
   },
   
   // Variants

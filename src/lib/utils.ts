@@ -61,6 +61,13 @@ export function formatPhoneNumber(phone: string): string {
 }
 
 /**
+ * Alias pour formatPhoneNumber (pour compatibilité)
+ */
+export function formatPhone(phone: string): string {
+  return formatPhoneNumber(phone);
+}
+
+/**
  * Calcule le total des ventes du jour
  */
 export function calculateDailyTotal(ventes: any[]): number {

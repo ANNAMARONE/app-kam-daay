@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useStore } from '../lib/store';
-import { database } from '../lib/database';
 import { Card, CardContent } from './ui/Card';
 import { Button } from './ui/Button';
 import Colors from '../constants/Colors';

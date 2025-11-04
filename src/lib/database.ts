@@ -1,12 +1,10 @@
 /**
  * Base de Données SQLite - Kame Daay React Native
- * Compatible Expo SQLite - Version 2 (API ASYNCHRONE Corrigée)
- * 🚨 CORRECTION: Remplacement de this.db.transaction() par runAsync/getAllAsync/execAsync.
+ * Compatible Expo SQLite 15+ (SDK 52) - Nouvelle API Async
  */
 
-import { openDatabaseAsync, type WebSQLDatabase, type SQLiteRunResult } from 'expo-sqlite';
+import * as SQLite from 'expo-sqlite';
 
-// --- Interfaces (Laissées inchangées) ---
 export interface Client {
   id?: number;
   nom: string;
@@ -94,30 +92,26 @@ export interface Rappel {
 }
 
 export class KameDaayDatabase {
-  private db: WebSQLDatabase; 
+  private db: SQLite.SQLiteDatabase;
+  private static instance: KameDaayDatabase | null = null;
 
-  private constructor(db: WebSQLDatabase) {
-    this.db = db;
+  private constructor(database: SQLite.SQLiteDatabase) {
+    this.db = database;
   }
-  
-  /**
-   * Initialise la base de données de manière asynchrone et crée les tables.
-   */
+
+  // Méthode statique pour initialiser et retourner l'instance
   static async initialize(): Promise<KameDaayDatabase> {
-    const db = await openDatabaseAsync('kame_daay.db');
-    const instance = new KameDaayDatabase(db);
-    await instance.initDatabase(); // Attendre l'initialisation des tables
-    return instance;
+    if (!KameDaayDatabase.instance) {
+      const db = await SQLite.openDatabaseAsync('kame_daay.db');
+      KameDaayDatabase.instance = new KameDaayDatabase(db);
+      await KameDaayDatabase.instance.initDatabase();
+    }
+    return KameDaayDatabase.instance;
   }
-  
-  /**
-   * Crée toutes les tables en utilisant execAsync (méthode V2).
-   */
-  private async initDatabase() {
-    // Utiliser execAsync pour exécuter plusieurs instructions SQL efficacement.
-    await this.db.execAsync(`
-      PRAGMA journal_mode = WAL;
 
+  private async initDatabase() {
+    // Table Clients
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS clients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT NOT NULL,
@@ -129,7 +123,10 @@ export class KameDaayDatabase {
         derniereVisite INTEGER,
         createdAt INTEGER NOT NULL
       );
+    `);
 
+    // Table Ventes
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS ventes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         clientId INTEGER NOT NULL,
@@ -139,7 +136,10 @@ export class KameDaayDatabase {
         statut TEXT NOT NULL,
         date INTEGER NOT NULL
       );
+    `);
 
+    // Table Interactions
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS interactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         clientId INTEGER NOT NULL,
@@ -147,13 +147,19 @@ export class KameDaayDatabase {
         message TEXT,
         date INTEGER NOT NULL
       );
+    `);
 
+    // Table Templates
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS templates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT NOT NULL,
         message TEXT NOT NULL
       );
+    `);
 
+    // Table Produits
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS produits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nom TEXT NOT NULL,
@@ -163,7 +169,10 @@ export class KameDaayDatabase {
         categorie TEXT,
         createdAt INTEGER NOT NULL
       );
+    `);
 
+    // Table Paiements
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS paiements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         venteId INTEGER NOT NULL,
@@ -171,14 +180,20 @@ export class KameDaayDatabase {
         date INTEGER NOT NULL,
         methode TEXT NOT NULL
       );
+    `);
 
+    // Table Objectifs
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS objectifs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mois TEXT NOT NULL UNIQUE,
+        mois TEXT NOT NULL,
         montantCible REAL NOT NULL,
         description TEXT
       );
+    `);
 
+    // Table Depenses
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS depenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         categorie TEXT NOT NULL,
@@ -187,7 +202,10 @@ export class KameDaayDatabase {
         date INTEGER NOT NULL,
         recu TEXT
       );
+    `);
 
+    // Table Rappels
+    await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS rappels (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         clientId INTEGER NOT NULL,
@@ -200,11 +218,8 @@ export class KameDaayDatabase {
     `);
   }
 
-  // ------------------------------------
   // === CLIENTS ===
-  // ------------------------------------
   async addClient(client: Client): Promise<number> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour l'insertion
     const result = await this.db.runAsync(
       'INSERT INTO clients (nom, prenom, telephone, adresse, type, notes, derniereVisite, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [client.nom, client.prenom, client.telephone, client.adresse || null, client.type || null, client.notes || null, client.derniereVisite || null, Date.now()]
@@ -213,10 +228,8 @@ export class KameDaayDatabase {
   }
 
   async getAllClients(): Promise<Client[]> {
-    // 🚨 CORRECTION: Utilisation de getAllAsync pour la lecture
-    return this.db.getAllAsync<Client>(
-      'SELECT * FROM clients ORDER BY createdAt DESC'
-    );
+    const result = await this.db.getAllAsync<Client>('SELECT * FROM clients ORDER BY createdAt DESC');
+    return result;
   }
 
   async updateClient(id: number, client: Partial<Client>): Promise<void> {
@@ -224,7 +237,6 @@ export class KameDaayDatabase {
     const values = fields.map(k => (client as any)[k]);
     const setClause = fields.map(f => `${f} = ?`).join(', ');
 
-    // 🚨 CORRECTION: Utilisation de runAsync pour la mise à jour
     await this.db.runAsync(
       `UPDATE clients SET ${setClause} WHERE id = ?`,
       [...values, id]
@@ -232,18 +244,11 @@ export class KameDaayDatabase {
   }
 
   async deleteClient(id: number): Promise<void> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour la suppression
-    await this.db.runAsync(
-      'DELETE FROM clients WHERE id = ?',
-      [id]
-    );
+    await this.db.runAsync('DELETE FROM clients WHERE id = ?', [id]);
   }
 
-  // ------------------------------------
   // === VENTES ===
-  // ------------------------------------
   async addVente(vente: Vente): Promise<number> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour l'insertion
     const result = await this.db.runAsync(
       'INSERT INTO ventes (clientId, articles, total, montantPaye, statut, date) VALUES (?, ?, ?, ?, ?, ?)',
       [vente.clientId, JSON.stringify(vente.articles), vente.total, vente.montantPaye, vente.statut, Date.now()]
@@ -252,11 +257,7 @@ export class KameDaayDatabase {
   }
 
   async getAllVentes(): Promise<Vente[]> {
-    // 🚨 CORRECTION: Utilisation de getAllAsync pour la lecture
-    const rows = await this.db.getAllAsync<any>(
-      'SELECT * FROM ventes ORDER BY date DESC'
-    );
-    // Mapping pour parser le JSON 'articles'
+    const rows = await this.db.getAllAsync<any>('SELECT * FROM ventes ORDER BY date DESC');
     return rows.map(row => ({
       ...row,
       articles: JSON.parse(row.articles)
@@ -264,32 +265,43 @@ export class KameDaayDatabase {
   }
 
   async updateVente(id: number, vente: Partial<Vente>): Promise<void> {
-    const fields: string[] = [];
-    const values: any[] = [];
-
-    if (vente.statut) {
-      fields.push('statut = ?');
-      values.push(vente.statut);
-    }
-    if (vente.montantPaye !== undefined) {
-      fields.push('montantPaye = ?');
-      values.push(vente.montantPaye);
+    const updates: any = { ...vente };
+    if (updates.articles) {
+      updates.articles = JSON.stringify(updates.articles);
     }
     
-    if (fields.length > 0) {
-      // 🚨 CORRECTION: Utilisation de runAsync pour la mise à jour
-      await this.db.runAsync(
-        `UPDATE ventes SET ${fields.join(', ')} WHERE id = ?`,
-        [...values, id]
-      );
-    }
+    const fields = Object.keys(updates).filter(k => k !== 'id');
+    const values = fields.map(k => updates[k]);
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+
+    await this.db.runAsync(
+      `UPDATE ventes SET ${setClause} WHERE id = ?`,
+      [...values, id]
+    );
   }
 
-  // ------------------------------------
+  // === INTERACTIONS ===
+  async addInteraction(interaction: Interaction): Promise<number> {
+    const result = await this.db.runAsync(
+      'INSERT INTO interactions (clientId, type, message, date) VALUES (?, ?, ?, ?)',
+      [interaction.clientId, interaction.type, interaction.message || null, Date.now()]
+    );
+    return result.lastInsertRowId;
+  }
+
+  async getAllInteractions(): Promise<Interaction[]> {
+    return await this.db.getAllAsync<Interaction>('SELECT * FROM interactions ORDER BY date DESC');
+  }
+
+  async getClientInteractions(clientId: number): Promise<Interaction[]> {
+    return await this.db.getAllAsync<Interaction>(
+      'SELECT * FROM interactions WHERE clientId = ? ORDER BY date DESC',
+      [clientId]
+    );
+  }
+
   // === PAIEMENTS ===
-  // ------------------------------------
   async addPaiement(paiement: Paiement): Promise<number> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour l'insertion
     const result = await this.db.runAsync(
       'INSERT INTO paiements (venteId, montant, date, methode) VALUES (?, ?, ?, ?)',
       [paiement.venteId, paiement.montant, Date.now(), paiement.methode]
@@ -298,17 +310,11 @@ export class KameDaayDatabase {
   }
 
   async getAllPaiements(): Promise<Paiement[]> {
-    // 🚨 CORRECTION: Utilisation de getAllAsync pour la lecture
-    return this.db.getAllAsync<Paiement>(
-      'SELECT * FROM paiements ORDER BY date DESC'
-    );
+    return await this.db.getAllAsync<Paiement>('SELECT * FROM paiements ORDER BY date DESC');
   }
 
-  // ------------------------------------
   // === TEMPLATES ===
-  // ------------------------------------
   async addTemplate(template: Template): Promise<number> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour l'insertion
     const result = await this.db.runAsync(
       'INSERT INTO templates (nom, message) VALUES (?, ?)',
       [template.nom, template.message]
@@ -317,25 +323,71 @@ export class KameDaayDatabase {
   }
 
   async getAllTemplates(): Promise<Template[]> {
-    // 🚨 CORRECTION: Utilisation de getAllAsync pour la lecture
-    return this.db.getAllAsync<Template>(
-      'SELECT * FROM templates'
-    );
+    return await this.db.getAllAsync<Template>('SELECT * FROM templates');
   }
 
   async deleteTemplate(id: number): Promise<void> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour la suppression
+    await this.db.runAsync('DELETE FROM templates WHERE id = ?', [id]);
+  }
+
+  // === PRODUITS ===
+  async addProduit(produit: Produit): Promise<number> {
+    const result = await this.db.runAsync(
+      'INSERT INTO produits (nom, prixUnitaire, description, stock, categorie, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+      [produit.nom, produit.prixUnitaire, produit.description || null, produit.stock || null, produit.categorie || null, Date.now()]
+    );
+    return result.lastInsertRowId;
+  }
+
+  async getAllProduits(): Promise<Produit[]> {
+    return await this.db.getAllAsync<Produit>('SELECT * FROM produits ORDER BY createdAt DESC');
+  }
+
+  async updateProduit(id: number, produit: Partial<Produit>): Promise<void> {
+    const fields = Object.keys(produit).filter(k => k !== 'id');
+    const values = fields.map(k => (produit as any)[k]);
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+
     await this.db.runAsync(
-      'DELETE FROM templates WHERE id = ?',
-      [id]
+      `UPDATE produits SET ${setClause} WHERE id = ?`,
+      [...values, id]
     );
   }
 
-  // ------------------------------------
+  async deleteProduit(id: number): Promise<void> {
+    await this.db.runAsync('DELETE FROM produits WHERE id = ?', [id]);
+  }
+
+  // === OBJECTIFS ===
+  async addObjectif(objectif: Objectif): Promise<number> {
+    const result = await this.db.runAsync(
+      'INSERT INTO objectifs (mois, montantCible, description) VALUES (?, ?, ?)',
+      [objectif.mois, objectif.montantCible, objectif.description || null]
+    );
+    return result.lastInsertRowId;
+  }
+
+  async getAllObjectifs(): Promise<Objectif[]> {
+    return await this.db.getAllAsync<Objectif>('SELECT * FROM objectifs ORDER BY mois DESC');
+  }
+
+  async updateObjectif(id: number, objectif: Partial<Objectif>): Promise<void> {
+    const fields = Object.keys(objectif).filter(k => k !== 'id');
+    const values = fields.map(k => (objectif as any)[k]);
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+
+    await this.db.runAsync(
+      `UPDATE objectifs SET ${setClause} WHERE id = ?`,
+      [...values, id]
+    );
+  }
+
+  async deleteObjectif(id: number): Promise<void> {
+    await this.db.runAsync('DELETE FROM objectifs WHERE id = ?', [id]);
+  }
+
   // === DEPENSES ===
-  // ------------------------------------
   async addDepense(depense: Depense): Promise<number> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour l'insertion
     const result = await this.db.runAsync(
       'INSERT INTO depenses (categorie, montant, description, date, recu) VALUES (?, ?, ?, ?, ?)',
       [depense.categorie, depense.montant, depense.description, depense.date || Date.now(), depense.recu || null]
@@ -344,25 +396,15 @@ export class KameDaayDatabase {
   }
 
   async getAllDepenses(): Promise<Depense[]> {
-    // 🚨 CORRECTION: Utilisation de getAllAsync pour la lecture
-    return this.db.getAllAsync<Depense>(
-      'SELECT * FROM depenses ORDER BY date DESC'
-    );
+    return await this.db.getAllAsync<Depense>('SELECT * FROM depenses ORDER BY date DESC');
   }
 
   async deleteDepense(id: number): Promise<void> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour la suppression
-    await this.db.runAsync(
-      'DELETE FROM depenses WHERE id = ?',
-      [id]
-    );
+    await this.db.runAsync('DELETE FROM depenses WHERE id = ?', [id]);
   }
 
-  // ------------------------------------
   // === RAPPELS ===
-  // ------------------------------------
   async addRappel(rappel: Rappel): Promise<number> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour l'insertion
     const result = await this.db.runAsync(
       'INSERT INTO rappels (clientId, venteId, message, dateLimite, resolu, dateCreation) VALUES (?, ?, ?, ?, ?, ?)',
       [rappel.clientId, rappel.venteId, rappel.message, rappel.dateLimite, rappel.resolu ? 1 : 0, Date.now()]
@@ -371,11 +413,7 @@ export class KameDaayDatabase {
   }
 
   async getAllRappels(): Promise<Rappel[]> {
-    // 🚨 CORRECTION: Utilisation de getAllAsync pour la lecture
-    const rows = await this.db.getAllAsync<any>(
-      'SELECT * FROM rappels ORDER BY dateLimite ASC'
-    );
-    // Mapping pour convertir l'entier 'resolu' en boolean
+    const rows = await this.db.getAllAsync<any>('SELECT * FROM rappels ORDER BY dateLimite ASC');
     return rows.map(row => ({
       ...row,
       resolu: row.resolu === 1
@@ -383,103 +421,90 @@ export class KameDaayDatabase {
   }
 
   async updateRappel(id: number, rappel: Partial<Rappel>): Promise<void> {
-    const fields: string[] = [];
-    const values: any[] = [];
-
-    if (rappel.resolu !== undefined) {
-      fields.push('resolu = ?');
-      values.push(rappel.resolu ? 1 : 0);
+    const updates: any = { ...rappel };
+    if (updates.resolu !== undefined) {
+      updates.resolu = updates.resolu ? 1 : 0;
     }
-    
-    if (fields.length > 0) {
-      // 🚨 CORRECTION: Utilisation de runAsync pour la mise à jour
-      await this.db.runAsync(
-        `UPDATE rappels SET ${fields.join(', ')} WHERE id = ?`,
-        [...values, id]
-      );
-    }
-  }
 
-  async deleteRappel(id: number): Promise<void> {
-    // 🚨 CORRECTION: Utilisation de runAsync pour la suppression
+    const fields = Object.keys(updates).filter(k => k !== 'id');
+    const values = fields.map(k => updates[k]);
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+
     await this.db.runAsync(
-      'DELETE FROM rappels WHERE id = ?',
-      [id]
+      `UPDATE rappels SET ${setClause} WHERE id = ?`,
+      [...values, id]
     );
   }
 
-  // ------------------------------------
+  async deleteRappel(id: number): Promise<void> {
+    await this.db.runAsync('DELETE FROM rappels WHERE id = ?', [id]);
+  }
+
   // === BACKUP & RESTORE ===
-  // ------------------------------------
   async exportAllData(): Promise<string> {
-    // Utilise les nouvelles méthodes getAll* corrigées
     const clients = await this.getAllClients();
     const ventes = await this.getAllVentes();
-    const paiements = await this.getAllPaiements();
     const templates = await this.getAllTemplates();
+    const produits = await this.getAllProduits();
+    const paiements = await this.getAllPaiements();
+    const objectifs = await this.getAllObjectifs();
     const depenses = await this.getAllDepenses();
     const rappels = await this.getAllRappels();
 
-    const data = {
+    return JSON.stringify({
       clients,
       ventes,
-      paiements,
       templates,
+      produits,
+      paiements,
+      objectifs,
       depenses,
       rappels,
-      exportDate: Date.now(),
-      version: '2.0'
-    };
-
-    return JSON.stringify(data, null, 2);
+      exportDate: Date.now()
+    });
   }
 
   async importAllData(jsonData: string): Promise<void> {
     const data = JSON.parse(jsonData);
 
-    // Les boucles d'importation utilisent les méthodes add* corrigées (runAsync)
+    // Import clients
     for (const client of data.clients || []) {
       await this.addClient(client);
     }
 
+    // Import ventes
     for (const vente of data.ventes || []) {
       await this.addVente(vente);
     }
 
-    for (const paiement of data.paiements || []) {
-      await this.addPaiement(paiement);
-    }
-
+    // Import templates
     for (const template of data.templates || []) {
       await this.addTemplate(template);
     }
 
+    // Import produits
+    for (const produit of data.produits || []) {
+      await this.addProduit(produit);
+    }
+
+    // Import paiements
+    for (const paiement of data.paiements || []) {
+      await this.addPaiement(paiement);
+    }
+
+    // Import objectifs
+    for (const objectif of data.objectifs || []) {
+      await this.addObjectif(objectif);
+    }
+
+    // Import depenses
     for (const depense of data.depenses || []) {
       await this.addDepense(depense);
     }
 
+    // Import rappels
     for (const rappel of data.rappels || []) {
       await this.addRappel(rappel);
     }
   }
-  
-  // ------------------------------------
-  // === PRODUITS, OBJECTIFS, INTERACTIONS (Placeholders V2) ===
-  // Les méthodes GET/ADD/UPDATE/DELETE pour ces tables
-  // doivent être implémentées ici en utilisant runAsync/getAllAsync
-  // si vous souhaitez les utiliser dans votre store.
-  // ------------------------------------
-  
-  async addInteraction(interaction: Interaction): Promise<number> {
-    const result = await this.db.runAsync(
-        'INSERT INTO interactions (clientId, type, message, date) VALUES (?, ?, ?, ?)',
-        [interaction.clientId, interaction.type, interaction.message || null, Date.now()]
-    );
-    return result.lastInsertRowId;
-  }
-  // Ajoutez d'autres méthodes (Produits, Objectifs) selon le même modèle si nécessaire.
 }
-
-// 🚨 RETRAIT DU NEW SYCHRONE: Il ne faut plus exporter une instance créée ici.
-// L'instance doit être créée par KameDaayDatabase.initialize() dans App.js et injectée dans le store.
-// export const database = new KameDaayDatabase(); // C'est ce qui causait le problème.

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "kame-daay-mobile",
+    "name": "kam-daay",
     "slug": "kame-daay-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,13 +21,19 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.annamarone.kamedaaymobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "de4f3a87-ad44-4441-8ccd-5890c9142650"
+      }
+    }
   }
 }

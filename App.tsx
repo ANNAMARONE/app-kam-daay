@@ -1,18 +1,18 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 
-// 🚨 MODIFICATIONS MAJEURES ICI :
 import { useStore, setDatabaseInstance } from './src/lib/store';
-import { KameDaayDatabase } from './src/lib/database'; // Importer la CLASSE de la DB
+import { KameDaayDatabase } from './src/lib/database';
+import { syncService } from './src/lib/sync';
 
 import Colors from './src/constants/Colors';
 
-// Importez vos composants (à créer)
+// Importez vos composants
 import Dashboard from './src/components/Dashboard';
 import ClientsList from './src/components/ClientsList';
 import VentesPage from './src/components/VentesPage';
@@ -21,48 +21,246 @@ import StatistiquesPage from './src/components/StatistiquesPage';
 import DepensesPage from './src/components/DepensesPage';
 import RappelsPage from './src/components/RappelsPage';
 import ParametresPage from './src/components/ParametresPage';
-
+import WelcomeScreen from './src/components/WelcomeScreen';
+import LoginScreen from './src/components/LoginScreen';
+import SignupScreen from './src/components/SignupScreen';
+import SyncStatusBar from './src/components/SyncStatusBar';
+import NetworkDebugScreen from './src/components/NetworkDebugScreen';
 
 const Tab = createBottomTabNavigator();
 
+// Composant Menu Burger
+function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: { 
+  visible: boolean; 
+  onClose: () => void; 
+  onNavigate: (screen: string) => void;
+  rappelsActifs?: number;
+}) {
+  const menuItems = [
+    { 
+      name: 'Statistiques', 
+      icon: 'bar-chart', 
+      description: 'Visualisez vos performances',
+      color: Colors.primary 
+    },
+    { 
+      name: 'Depenses', 
+      icon: 'trending-down', 
+      description: 'Gérez vos dépenses',
+      color: '#FF6B6B' 
+    },
+    { 
+      name: 'Rappels', 
+      icon: 'notifications', 
+      description: 'Vos notifications',
+      color: '#FFA726',
+      badge: rappelsActifs 
+    },
+    { 
+      name: 'Parametres', 
+      icon: 'settings', 
+      description: 'Configuration de l\'app',
+      color: '#666666' 
+    },
+  ];
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity 
+          style={styles.modalBackdrop} 
+          activeOpacity={1} 
+          onPress={onClose}
+        />
+        <SafeAreaView style={styles.menuContainer} edges={['bottom']}>
+          {/* Header */}
+          <View style={styles.menuHeader}>
+            <View style={styles.menuHeaderLeft}>
+              <View style={styles.menuIcon}>
+                <Text style={styles.menuIconText}>💼</Text>
+              </View>
+              <View>
+                <Text style={styles.menuTitle}>Menu</Text>
+                <Text style={styles.menuSubtitle}>Plus d'options</Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={28} color={Colors.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Menu Items */}
+          <ScrollView style={styles.menuContent}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={item.name}
+                style={[
+                  styles.menuItem,
+                  index === 0 && styles.menuItemFirst
+                ]}
+                onPress={() => {
+                  onNavigate(item.name);
+                  onClose();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.menuItemIconContainer, { backgroundColor: `${item.color}20` }]}>
+                  <Ionicons name={item.icon as any} size={24} color={item.color} />
+                  {typeof item.badge === 'number' && item.badge > 0 && (
+                    <View style={styles.menuItemBadge}>
+                      <Text style={styles.menuItemBadgeText}>
+                        {item.badge > 99 ? '99+' : String(item.badge)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.menuItemContent}>
+                  <Text style={styles.menuItemTitle}>{String(item.name)}</Text>
+                  <Text style={styles.menuItemDescription}>{String(item.description)}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.grayDark} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Footer */}
+          <View style={styles.menuFooter}>
+            <Text style={styles.menuFooterText}>Kame Daay • Version 1.0</Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
+// Composant placeholder pour l'onglet Menu
+function MenuScreen() {
+  return <View style={{ flex: 1, backgroundColor: Colors.white }} />;
+}
+
 export default function App() {
-  // 🚨 NOUVEL ÉTAT LOCAL pour suivre l'initialisation de la DB
   const [dbInitialized, setDbInitialized] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const navigationRef = useRef<any>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [authScreen, setAuthScreen] = useState<'welcome' | 'login' | 'signup' | 'debug'>('welcome');
   
-  // Récupérer loadData et l'état de chargement des données de l'application
   const { loadData, isLoading, rappels } = useStore();
   
-  // Utiliser useCallback pour stabiliser la fonction
   const initializeDatabaseAndLoadData = useCallback(async () => {
     try {
-      // 1. INITIALISATION ASYNCHRONE DE LA BASE DE DONNÉES
       const dbInstance = await KameDaayDatabase.initialize();
-      
-      // 2. INJECTION DE L'INSTANCE DANS LE STORE ZUSTAND
       setDatabaseInstance(dbInstance);
-      
-      // 3. MARQUER LA DB COMME INITIALISÉE
       setDbInitialized(true);
-
-      // 4. CHARGEMENT DES DONNÉES VIA ZUSTAND (maintenant que la DB est prête)
       await loadData();
-
     } catch (error) {
       console.error("Erreur critique lors de l'initialisation de la DB:", error);
-      // Gérer l'échec (ex: afficher une erreur fatale)
     }
   }, [loadData]);
 
+  useEffect(() => {
+    // Vérifier l'authentification au démarrage
+    const checkAuth = async () => {
+      const isAuth = await syncService.isAuthenticated();
+      setIsAuthenticated(isAuth);
+      setAuthChecking(false);
+      
+      if (isAuth) {
+        // Démarrer la synchronisation automatique
+        syncService.startAutoSync(5); // Toutes les 5 minutes
+      }
+    };
+    
+    checkAuth();
+  }, []);
 
   useEffect(() => {
-    // Exécuter l'initialisation uniquement si ce n'est pas déjà fait
-    if (!dbInitialized) {
+    if (!dbInitialized && isAuthenticated) {
       initializeDatabaseAndLoadData();
     }
-  }, [dbInitialized, initializeDatabaseAndLoadData]);
+  }, [dbInitialized, isAuthenticated, initializeDatabaseAndLoadData]);
 
+  // Synchroniser au démarrage après initialisation
+  useEffect(() => {
+    if (dbInitialized && isAuthenticated) {
+      // Petite attente pour laisser l'UI se charger
+      const timer = setTimeout(async () => {
+        console.log('🔄 Synchronisation automatique au démarrage...');
+        await syncService.syncToServer();
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [dbInitialized, isAuthenticated]);
 
-  // Utiliser dbInitialized ET isLoading pour l'écran de chargement
+  const handleAuthSuccess = async (token: string, user: any) => {
+    await syncService.setAccessToken(token);
+    setIsAuthenticated(true);
+    // Démarrer la synchronisation automatique
+    syncService.startAutoSync(5);
+    // Synchroniser immédiatement les données du serveur
+    await syncService.syncFromServer();
+  };
+
+  // Vérification de l'authentification
+  if (authChecking) {
+    return (
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingContent}>
+          <View style={styles.spinnerContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <View style={styles.spinnerPulse} />
+          </View>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoEmoji}>💼</Text>
+          </View>
+          <Text style={styles.loadingTitle}>Kame Daay</Text>
+          <Text style={styles.loadingSubtitle}>Vérification...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Écrans d'authentification
+  if (!isAuthenticated) {
+    if (authScreen === 'welcome') {
+      return (
+        <WelcomeScreen
+          onLogin={() => setAuthScreen('login')}
+          onSignup={() => setAuthScreen('signup')}
+          onDebug={() => setAuthScreen('debug')}
+        />
+      );
+    } else if (authScreen === 'login') {
+      return (
+        <LoginScreen
+          onLoginSuccess={handleAuthSuccess}
+          onBack={() => setAuthScreen('welcome')}
+        />
+      );
+    } else if (authScreen === 'signup') {
+      return (
+        <SignupScreen
+          onSignupSuccess={handleAuthSuccess}
+          onBack={() => setAuthScreen('welcome')}
+        />
+      );
+    } else if (authScreen === 'debug') {
+      return (
+        <NetworkDebugScreen
+          onBack={() => setAuthScreen('welcome')}
+        />
+      );
+    }
+  }
+
+  // Chargement des données
   if (!dbInitialized || isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -88,99 +286,100 @@ export default function App() {
     );
   }
 
-  // Calculer les rappels actifs
-  const rappelsActifs = rappels.filter(r => !r.resolu).length;
+  const rappelsActifs = (rappels || []).filter(r => !r.resolu).length;
+
+  const handleNavigateFromMenu = (screenName: string) => {
+    if (navigationRef.current) {
+      navigationRef.current.navigate(screenName);
+    }
+  };
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
+        {/* Barre de statut de synchronisation */}
+        <SyncStatusBar />
+        
         <Tab.Navigator
           screenOptions={({ route }) => ({
-            tabBarIcon: ({ focused, color, size }) => {
-              let iconName: keyof typeof Ionicons.glyphMap;
-              let badge = 0;
+              tabBarIcon: ({ focused, color, size }) => {
+                let iconName: keyof typeof Ionicons.glyphMap;
 
-              switch (route.name) {
-                case 'Dashboard':
-                  iconName = focused ? 'home' : 'home-outline';
-                  break;
-                case 'Clients':
-                  iconName = focused ? 'people' : 'people-outline';
-                  break;
-                case 'Ventes':
-                  iconName = focused ? 'cart' : 'cart-outline';
-                  break;
-                case 'Credits':
-                  iconName = focused ? 'card' : 'card-outline';
-                  break;
-                case 'Statistiques':
-                  iconName = focused ? 'bar-chart' : 'bar-chart-outline';
-                  break;
-                case 'Depenses':
-                  iconName = focused ? 'trending-down' : 'trending-down-outline';
-                  break;
-                case 'Rappels':
-                  iconName = focused ? 'notifications' : 'notifications-outline';
-                  badge = rappelsActifs;
-                  break;
-                case 'Parametres':
-                  iconName = focused ? 'settings' : 'settings-outline';
-                  break;
-                default:
-                  iconName = 'home-outline';
-              }
+                switch (route.name) {
+                  case 'Dashboard':
+                    iconName = focused ? 'home' : 'home-outline';
+                    break;
+                  case 'Clients':
+                    iconName = focused ? 'people' : 'people-outline';
+                    break;
+                  case 'Ventes':
+                    iconName = focused ? 'cart' : 'cart-outline';
+                    break;
+                  case 'Credits':
+                    iconName = focused ? 'card' : 'card-outline';
+                    break;
+                  case 'Menu':
+                    iconName = focused ? 'menu' : 'menu-outline';
+                    break;
+                  default:
+                    iconName = 'home-outline';
+                }
 
-              // Rendu personnalisé avec effet et badge
-              return (
-                <View style={styles.tabIconContainer}>
-                  {focused && <View style={styles.tabIndicator} />}
-                  <View style={[
-                    styles.tabIconWrapper,
-                    focused && styles.tabIconWrapperActive
-                  ]}>
-                    <Ionicons name={iconName} size={size} color={color} />
-                    {badge > 0 && (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
-                      </View>
-                    )}
+                return (
+                  <View style={styles.tabIconContainer}>
+                    {focused && <View style={styles.tabIndicator} />}
+                    <View style={[
+                      styles.tabIconWrapper,
+                      focused && styles.tabIconWrapperActive
+                    ]}>
+                      <Ionicons name={iconName} size={size} color={color} />
+                      {route.name === 'Menu' && rappelsActifs > 0 && (
+                        <View style={styles.badge}>
+                          <Text style={styles.badgeText}>
+                            {rappelsActifs > 99 ? '99+' : String(rappelsActifs)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                </View>
-              );
-            },
-            tabBarActiveTintColor: Colors.primary,
-            tabBarInactiveTintColor: Colors.grayDark,
-            tabBarStyle: {
-              height: 80,
-              paddingBottom: 10,
-              paddingTop: 10,
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              borderTopWidth: 1,
-              borderTopColor: 'rgba(0, 77, 64, 0.1)',
-              // 🚨 CORRECTION D'AVERTISSEMENT: shadow* style props sont pour iOS, pas de boxShadow pour React Native Web.
-              // Laisser comme ça pour une meilleure compatibilité mobile.
-              shadowColor: Colors.black,
-              shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 12,
-              elevation: 8,
-            },
-            tabBarLabelStyle: {
-              fontSize: 10,
-              fontWeight: '600',
-            },
-            headerStyle: {
-              backgroundColor: Colors.secondary,
-              elevation: 0,
-              shadowOpacity: 0,
-            },
-            headerTintColor: Colors.white,
-            headerTitleStyle: {
-              fontWeight: '600',
-              fontSize: 18,
-            },
-            headerShown: false, // Caché car chaque page a son propre header
-          })}
+                );
+              },
+              tabBarActiveTintColor: Colors.primary,
+              tabBarInactiveTintColor: Colors.grayDark,
+              tabBarStyle: {
+                height: 70,
+                paddingBottom: 8,
+                paddingTop: 8,
+                backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                borderTopWidth: 1,
+                borderTopColor: 'rgba(0, 77, 64, 0.1)',
+                shadowColor: Colors.black,
+                shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+                elevation: 8,
+              },
+              tabBarLabelStyle: {
+                fontSize: 11,
+                fontWeight: '600',
+                marginTop: 4,
+                marginBottom: 2,
+              },
+              tabBarItemStyle: {
+                paddingVertical: 4,
+              },
+              headerStyle: {
+                backgroundColor: Colors.secondary,
+                elevation: 0,
+                shadowOpacity: 0,
+              },
+              headerTintColor: Colors.white,
+              headerTitleStyle: {
+                fontWeight: '600',
+                fontSize: 18,
+              },
+              headerShown: false,
+            })}
         >
           <Tab.Screen
             name="Dashboard"
@@ -203,26 +402,60 @@ export default function App() {
             options={{ title: 'Crédits' }}
           />
           <Tab.Screen
+            name="Menu"
+            component={MenuScreen}
+            options={{ title: 'Menu' }}
+            listeners={({ navigation: nav }) => ({
+              tabPress: (e) => {
+                e.preventDefault();
+                navigationRef.current = nav;
+                setMenuVisible(true);
+              },
+            })}
+          />
+          
+          {/* Écrans cachés de la navigation (accessibles via le menu) */}
+          <Tab.Screen
             name="Statistiques"
             component={StatistiquesPage}
-            options={{ title: 'Stats' }}
+            options={{ 
+              title: 'Statistiques',
+              tabBarButton: () => null,
+            }}
           />
           <Tab.Screen
             name="Depenses"
             component={DepensesPage}
-            options={{ title: 'Dépenses' }}
+            options={{ 
+              title: 'Dépenses',
+              tabBarButton: () => null,
+            }}
           />
           <Tab.Screen
             name="Rappels"
             component={RappelsPage}
-            options={{ title: 'Rappels' }}
+            options={{ 
+              title: 'Rappels',
+              tabBarButton: () => null,
+            }}
           />
           <Tab.Screen
             name="Parametres"
             component={ParametresPage}
-            options={{ title: 'Paramètres' }}
+            options={{ 
+              title: 'Paramètres',
+              tabBarButton: () => null,
+            }}
           />
         </Tab.Navigator>
+
+        {/* Menu Burger */}
+        <MenuBurger
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          onNavigate={handleNavigateFromMenu}
+          rappelsActifs={rappelsActifs}
+        />
       </NavigationContainer>
       <Toast />
     </SafeAreaProvider>
@@ -265,9 +498,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    // 🚨 AVERTISSEMENT: shadow* style props sont dépréciés sur le web.
-    // Dans React Native, ces styles fonctionnent pour iOS et Android (via elevation).
-    // Si vous visez seulement le mobile, c'est acceptable.
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
@@ -293,12 +523,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    height: 44,
   },
   tabIndicator: {
     position: 'absolute',
-    top: -10,
+    top: -12,
     width: 48,
-    height: 4,
+    height: 3,
     backgroundColor: Colors.primary,
     borderRadius: 2,
     shadowColor: Colors.primary,
@@ -308,8 +539,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   tabIconWrapper: {
-    padding: 8,
-    borderRadius: 16,
+    padding: 6,
+    borderRadius: 14,
   },
   tabIconWrapperActive: {
     backgroundColor: 'rgba(255, 215, 0, 0.1)',
@@ -330,5 +561,141 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: Colors.white,
+  },
+
+  // Menu Burger
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  menuContainer: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  menuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 77, 64, 0.1)',
+  },
+  menuHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: Colors.primary,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuIconText: {
+    fontSize: 24,
+  },
+  menuTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.secondary,
+  },
+  menuSubtitle: {
+    fontSize: 13,
+    color: Colors.grayDark,
+    marginTop: 2,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 77, 64, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuContent: {
+    flex: 1,
+    padding: 16,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 77, 64, 0.08)',
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  menuItemFirst: {
+    marginTop: 4,
+  },
+  menuItemIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    position: 'relative',
+  },
+  menuItemBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    backgroundColor: Colors.error,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  menuItemBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  menuItemContent: {
+    flex: 1,
+  },
+  menuItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.secondary,
+    marginBottom: 2,
+  },
+  menuItemDescription: {
+    fontSize: 13,
+    color: Colors.grayDark,
+  },
+  menuFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 77, 64, 0.1)',
+    alignItems: 'center',
+  },
+  menuFooterText: {
+    fontSize: 12,
+    color: Colors.grayDark,
   },
 });

@@ -1,464 +1,403 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Modal, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  ScrollView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
 import { useStore } from '../lib/store';
-import { Card, CardContent } from './ui/Card';
-import { Button } from './ui/Button';
-import { Input } from './ui/Input';
+import { formatCurrency, formatPhone } from '../lib/utils';
 import Colors from '../constants/Colors';
-import { formatDate } from '../lib/utils';
-import { Client } from '../lib/database';
+import ClientForm from './ClientForm';
+import ClientDetail from './ClientDetail';
+
+type Tab = 'tous' | 'actifs' | 'inactifs' | 'credit';
 
 export default function ClientsList() {
-  const { clients, addClient, updateClient, deleteClient } = useStore();
+  const { clients, ventes, paiements } = useStore();
+  const [activeTab, setActiveTab] = useState<Tab>('tous');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  
-  // Form state
-  const [nom, setNom] = useState('');
-  const [prenom, setPrenom] = useState('');
-  const [telephone, setTelephone] = useState('');
-  const [adresse, setAdresse] = useState('');
-  const [type, setType] = useState<'Fidèle' | 'Nouveau' | 'Potentiel'>('Nouveau');
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [clientToEdit, setClientToEdit] = useState<any>(null);
 
+  // Calculer le solde crédit pour un client
+  const getClientCredit = (clientId: number) => {
+    const clientVentes = ventes.filter(v => v.clientId === clientId);
+    const totalVentes = clientVentes.reduce((sum, v) => sum + v.montantTotal, 0);
+    const clientPaiements = paiements.filter(p => p.clientId === clientId);
+    const totalPaiements = clientPaiements.reduce((sum, p) => sum + p.montant, 0);
+    return totalVentes - totalPaiements;
+  };
+
+  // Filtrer les clients selon l'onglet et la recherche
   const filteredClients = clients.filter(client => {
-    const query = searchQuery.toLowerCase();
-    return (
-      client.nom.toLowerCase().includes(query) ||
-      client.prenom.toLowerCase().includes(query) ||
-      client.telephone.includes(query)
-    );
+    const matchesSearch = client.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         client.prenom.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         client.telephone.includes(searchQuery);
+    
+    const credit = getClientCredit(client.id!);
+    const isActive = client.derniereVisite && (Date.now() - client.derniereVisite) < 30 * 24 * 60 * 60 * 1000;
+    
+    switch (activeTab) {
+      case 'actifs':
+        return matchesSearch && isActive;
+      case 'inactifs':
+        return matchesSearch && !isActive;
+      case 'credit':
+        return matchesSearch && credit > 0;
+      default:
+        return matchesSearch;
+    }
   });
 
-  const handleOpenForm = (client?: Client) => {
-    if (client) {
-      setSelectedClient(client);
-      setNom(client.nom);
-      setPrenom(client.prenom);
-      setTelephone(client.telephone);
-      setAdresse(client.adresse || '');
-      setType(client.type || 'Nouveau');
-    } else {
-      setSelectedClient(null);
-      setNom('');
-      setPrenom('');
-      setTelephone('');
-      setAdresse('');
-      setType('Nouveau');
-    }
-    setIsFormOpen(true);
+  // Trier par date de dernière visite
+  const sortedClients = [...filteredClients].sort((a, b) => {
+    const dateA = a.derniereVisite || 0;
+    const dateB = b.derniereVisite || 0;
+    return dateB - dateA;
+  });
+
+  // Ouvrir le formulaire
+  const openForm = (client?: any) => {
+    setClientToEdit(client || null);
+    setShowFormModal(true);
   };
 
-  const handleSubmit = async () => {
-    if (!nom || !prenom || !telephone) {
-      alert('Veuillez remplir tous les champs obligatoires');
-      return;
-    }
-
-    try {
-      if (selectedClient) {
-        await updateClient(selectedClient.id!, { nom, prenom, telephone, adresse, type });
-      } else {
-        await addClient({ nom, prenom, telephone, adresse, type, createdAt: Date.now() });
-      }
-      setIsFormOpen(false);
-      setNom('');
-      setPrenom('');
-      setTelephone('');
-      setAdresse('');
-      setType('Nouveau');
-    } catch (error) {
-      alert('Erreur lors de l\'enregistrement');
-    }
-  };
-
-  const handleOpenDetail = (client: Client) => {
+  // Ouvrir les détails
+  const openDetail = (client: any) => {
     setSelectedClient(client);
-    setIsDetailOpen(true);
+    setShowDetailModal(true);
   };
 
-  const renderClientItem = ({ item, index }: { item: Client; index: number }) => (
-    <TouchableOpacity
-      onPress={() => handleOpenDetail(item)}
-      activeOpacity={0.7}
-    >
-      <Card style={styles.clientCard}>
-        <CardContent style={styles.clientContent}>
-          <View style={styles.clientHeader}>
-            <View style={styles.clientAvatar}>
-              <Text style={styles.clientInitials}>
-                {item.prenom[0]}{item.nom[0]}
-              </Text>
-              {item.type === 'Fidèle' && (
-                <View style={styles.starBadge}>
-                  <Ionicons name="star" size={12} color={Colors.white} />
-                </View>
-              )}
-            </View>
-            
-            <View style={styles.clientInfo}>
-              <Text style={styles.clientName}>
-                {item.prenom} {item.nom}
-              </Text>
-              <View style={styles.phoneRow}>
-                <Ionicons name="call" size={12} color={Colors.textSecondary} />
-                <Text style={styles.clientPhone}>{item.telephone}</Text>
-              </View>
-              {item.type && (
-                <View style={[
-                  styles.typeBadge,
-                  item.type === 'Fidèle' && styles.typeBadgeFidele,
-                  item.type === 'Nouveau' && styles.typeBadgeNouveau,
-                  item.type === 'Potentiel' && styles.typeBadgePotentiel,
-                ]}>
-                  <Text style={[
-                    styles.typeBadgeText,
-                    item.type === 'Fidèle' && styles.typeBadgeTextFidele,
-                    item.type === 'Nouveau' && styles.typeBadgeTextNouveau,
-                    item.type === 'Potentiel' && styles.typeBadgeTextPotentiel,
-                  ]}>
-                    {item.type}
-                  </Text>
-                </View>
-              )}
-            </View>
+  // Fermer le formulaire
+  const closeForm = () => {
+    setShowFormModal(false);
+    setClientToEdit(null);
+  };
 
-            <TouchableOpacity
-              onPress={() => handleOpenForm(item)}
-              style={styles.editButton}
-            >
-              <Ionicons name="pencil" size={18} color={Colors.primary} />
-            </TouchableOpacity>
+  // Fermer les détails
+  const closeDetail = () => {
+    setShowDetailModal(false);
+    setSelectedClient(null);
+  };
+
+  // Ouvrir édition depuis les détails
+  const handleEditFromDetail = () => {
+    setShowDetailModal(false);
+    setTimeout(() => {
+      openForm(selectedClient);
+    }, 300);
+  };
+
+  // Tabs
+  const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: 'tous', label: 'Tous', icon: 'people' },
+    { id: 'actifs', label: 'Actifs', icon: 'checkmark-circle' },
+    { id: 'inactifs', label: 'Inactifs', icon: 'time' },
+    { id: 'credit', label: 'Crédit', icon: 'card' },
+  ];
+
+  const renderClient = ({ item }: { item: any }) => {
+    const credit = getClientCredit(item.id!);
+    const hasCredit = credit > 0;
+    const isActive = item.derniereVisite && (Date.now() - item.derniereVisite) < 30 * 24 * 60 * 60 * 1000;
+
+    return (
+      <TouchableOpacity
+        style={styles.clientCard}
+        onPress={() => openDetail(item)}
+        activeOpacity={0.7}
+      >
+        {/* Avatar et info */}
+        <View style={styles.clientHeader}>
+          <View style={[styles.avatar, hasCredit && styles.avatarCredit]}>
+            <Text style={styles.avatarText}>
+              {item.prenom.charAt(0).toUpperCase()}{item.nom.charAt(0).toUpperCase()}
+            </Text>
+            {item.type === 'Fidèle' && (
+              <View style={styles.starBadge}>
+                <Ionicons name="star" size={12} color={Colors.white} />
+              </View>
+            )}
           </View>
-        </CardContent>
-      </Card>
-    </TouchableOpacity>
-  );
+          <View style={styles.clientInfo}>
+            <Text style={styles.clientName}>{item.prenom} {item.nom}</Text>
+            <View style={styles.clientMeta}>
+              <Ionicons name="call" size={12} color={Colors.grayDark} />
+              <Text style={styles.clientPhone}>{formatPhone(item.telephone)}</Text>
+              {isActive && (
+                <View style={styles.activeBadge}>
+                  <Text style={styles.activeBadgeText}>Actif</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* Crédit si présent */}
+        {hasCredit && (
+          <View style={styles.clientFooter}>
+            <View style={styles.creditBadge}>
+              <Ionicons name="card" size={14} color={Colors.error} />
+              <Text style={styles.creditText}>{formatCurrency(credit)}</Text>
+            </View>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerBgEffect} />
-        <View style={styles.headerContent}>
-          <View style={styles.headerIcon}>
-            <Ionicons name="people" size={24} color={Colors.secondary} />
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.headerTitle}>Clients</Text>
+            <Text style={styles.headerSubtitle}>{sortedClients.length} clients</Text>
           </View>
-          <Text style={styles.headerTitle}>Mes Clients</Text>
+          <TouchableOpacity style={styles.addButton} onPress={() => openForm()}>
+            <Ionicons name="add" size={24} color={Colors.secondary} />
+          </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Search & Add */}
-      <View style={styles.actionsContainer}>
+        {/* Barre de recherche */}
         <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={Colors.textSecondary} style={styles.searchIcon} />
+          <Ionicons name="search" size={20} color={Colors.grayDark} />
           <TextInput
             style={styles.searchInput}
             placeholder="Rechercher un client..."
-            placeholderTextColor={Colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            placeholderTextColor={Colors.grayDark}
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={Colors.grayDark} />
+            </TouchableOpacity>
+          )}
         </View>
 
-        <TouchableOpacity
-          onPress={() => handleOpenForm()}
-          style={styles.addButton}
+        {/* Tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabsContainer}
         >
-          <Ionicons name="add" size={24} color={Colors.secondary} />
-        </TouchableOpacity>
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.id}
+              style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+              onPress={() => setActiveTab(tab.id)}
+            >
+              <Ionicons
+                name={tab.icon as any}
+                size={18}
+                color={activeTab === tab.id ? Colors.primary : Colors.grayDark}
+              />
+              <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* Liste des clients */}
       <FlatList
-        data={filteredClients}
+        data={sortedClients}
+        renderItem={renderClient}
         keyExtractor={(item) => item.id!.toString()}
-        renderItem={renderClientItem}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <Card style={styles.emptyCard}>
-            <CardContent style={styles.emptyContent}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="people" size={48} color={Colors.grayDark} />
-              </View>
-              <Text style={styles.emptyTitle}>
-                {searchQuery ? 'Aucun client trouvé' : 'Aucun client enregistré'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {searchQuery ? 'Essayez une autre recherche' : 'Ajoutez votre premier client'}
-              </Text>
-            </CardContent>
-          </Card>
+          <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={64} color={Colors.grayLight} />
+            <Text style={styles.emptyText}>Aucun client trouvé</Text>
+            <Text style={styles.emptySubtext}>
+              {searchQuery ? 'Essayez une autre recherche' : 'Ajoutez votre premier client'}
+            </Text>
+            {!searchQuery && (
+              <TouchableOpacity style={styles.emptyButton} onPress={() => openForm()}>
+                <Ionicons name="add-circle" size={20} color={Colors.white} />
+                <Text style={styles.emptyButtonText}>Ajouter un client</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         }
       />
 
       {/* Modal Formulaire */}
       <Modal
-        visible={isFormOpen}
+        visible={showFormModal}
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsFormOpen(false)}
+        presentationStyle="pageSheet"
+        onRequestClose={closeForm}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {selectedClient ? 'Modifier Client' : 'Nouveau Client'}
-              </Text>
-              <TouchableOpacity onPress={() => setIsFormOpen(false)}>
-                <Ionicons name="close" size={24} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.formScroll}>
-              <Input
-                label="Prénom *"
-                value={prenom}
-                onChangeText={setPrenom}
-                placeholder="Prénom"
-              />
-              <Input
-                label="Nom *"
-                value={nom}
-                onChangeText={setNom}
-                placeholder="Nom"
-              />
-              <Input
-                label="Téléphone *"
-                value={telephone}
-                onChangeText={setTelephone}
-                placeholder="+221 XX XXX XX XX"
-                keyboardType="phone-pad"
-              />
-              <Input
-                label="Adresse"
-                value={adresse}
-                onChangeText={setAdresse}
-                placeholder="Adresse (optionnel)"
-              />
-
-              <Text style={styles.inputLabel}>Type de Client</Text>
-              <View style={styles.typeSelector}>
-                {(['Nouveau', 'Fidèle', 'Potentiel'] as const).map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    onPress={() => setType(t)}
-                    style={[
-                      styles.typeOption,
-                      type === t && styles.typeOptionActive
-                    ]}
-                  >
-                    <Text style={[
-                      styles.typeOptionText,
-                      type === t && styles.typeOptionTextActive
-                    ]}>
-                      {t}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Button
-                title={selectedClient ? 'Modifier' : 'Ajouter'}
-                onPress={handleSubmit}
-                variant="primary"
-                fullWidth
-                style={styles.submitButton}
-              />
-            </ScrollView>
+        <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={closeForm}>
+              <Ionicons name="close" size={28} color={Colors.secondary} />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>
+              {clientToEdit ? 'Modifier Client' : 'Nouveau Client'}
+            </Text>
+            <View style={{ width: 28 }} />
           </View>
-        </View>
+          <ClientForm client={clientToEdit} onSuccess={closeForm} />
+        </SafeAreaView>
       </Modal>
 
-      {/* Modal Détail Client */}
+      {/* Modal Détails */}
       <Modal
-        visible={isDetailOpen}
+        visible={showDetailModal}
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsDetailOpen(false)}
+        presentationStyle="pageSheet"
+        onRequestClose={closeDetail}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Détails Client</Text>
-              <TouchableOpacity onPress={() => setIsDetailOpen(false)}>
-                <Ionicons name="close" size={24} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            {selectedClient && (
-              <ScrollView style={styles.detailScroll}>
-                <View style={styles.detailAvatar}>
-                  <Text style={styles.detailInitials}>
-                    {selectedClient.prenom[0]}{selectedClient.nom[0]}
-                  </Text>
-                </View>
-
-                <Text style={styles.detailName}>
-                  {selectedClient.prenom} {selectedClient.nom}
-                </Text>
-
-                <View style={styles.detailInfo}>
-                  <Ionicons name="call" size={20} color={Colors.primary} />
-                  <Text style={styles.detailInfoText}>{selectedClient.telephone}</Text>
-                </View>
-
-                {selectedClient.adresse && (
-                  <View style={styles.detailInfo}>
-                    <Ionicons name="location" size={20} color={Colors.primary} />
-                    <Text style={styles.detailInfoText}>{selectedClient.adresse}</Text>
-                  </View>
-                )}
-
-                <View style={styles.detailInfo}>
-                  <Ionicons name="calendar" size={20} color={Colors.primary} />
-                  <Text style={styles.detailInfoText}>
-                    Ajouté le {formatDate(selectedClient.createdAt)}
-                  </Text>
-                </View>
-
-                <View style={styles.detailActions}>
-                  <Button
-                    title="Modifier"
-                    onPress={() => {
-                      setIsDetailOpen(false);
-                      handleOpenForm(selectedClient);
-                    }}
-                    variant="primary"
-                    fullWidth
-                  />
-                  <Button
-                    title="Supprimer"
-                    onPress={async () => {
-                      if (confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) {
-                        await deleteClient(selectedClient.id!);
-                        setIsDetailOpen(false);
-                      }
-                    }}
-                    variant="outline"
-                    fullWidth
-                    style={styles.deleteButton}
-                  />
-                </View>
-              </ScrollView>
-            )}
+        <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={closeDetail}>
+              <Ionicons name="close" size={28} color={Colors.secondary} />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Détails Client</Text>
+            <View style={{ width: 28 }} />
           </View>
-        </View>
+          {selectedClient && (
+            <ClientDetail
+              client={selectedClient}
+              onClose={closeDetail}
+              onEdit={handleEditFromDetail}
+            />
+          )}
+        </SafeAreaView>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: Colors.background,
   },
   header: {
     backgroundColor: Colors.secondary,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    paddingBottom: 16,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
-    position: 'relative',
-    overflow: 'hidden',
   },
-  headerBgEffect: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 160,
-    height: 160,
-    backgroundColor: Colors.primary,
-    borderRadius: 80,
-    opacity: 0.1,
-  },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 16,
-  },
-  headerIcon: {
-    width: 48,
-    height: 48,
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginBottom: 16,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: Colors.white,
   },
-  actionsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginTop: -24,
-    gap: 12,
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  addButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  searchIcon: {
-    marginRight: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
   },
   searchInput: {
     flex: 1,
-    height: 48,
-    fontSize: 16,
-    color: Colors.text,
+    marginLeft: 8,
+    fontSize: 15,
+    color: Colors.white,
   },
-  addButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
-    justifyContent: 'center',
+  tabsContainer: {
+    flexGrow: 0,
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  tab: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginRight: 8,
+  },
+  tabActive: {
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.grayDark,
+    marginLeft: 6,
+  },
+  tabTextActive: {
+    color: Colors.primary,
   },
   listContent: {
     padding: 16,
     paddingBottom: 100,
   },
   clientCard: {
-    marginBottom: 12,
-  },
-  clientContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
     padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   clientHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  clientAvatar: {
-    width: 56,
-    height: 56,
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.primary,
-    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
     position: 'relative',
   },
-  clientInitials: {
+  avatarCredit: {
+    backgroundColor: Colors.error,
+  },
+  avatarText: {
     fontSize: 18,
     fontWeight: '700',
     color: Colors.secondary,
@@ -476,184 +415,103 @@ const styles = StyleSheet.create({
   },
   clientInfo: {
     flex: 1,
-    marginLeft: 16,
   },
   clientName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: Colors.secondary,
     marginBottom: 4,
   },
-  phoneRow: {
+  clientMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 8,
   },
   clientPhone: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+    fontSize: 13,
+    color: Colors.grayDark,
+    marginLeft: 4,
   },
-  typeBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+  activeBadge: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: '#8BC34A20',
+    borderRadius: 8,
   },
-  typeBadgeFidele: {
-    backgroundColor: '#E8F5E9',
-  },
-  typeBadgeNouveau: {
-    backgroundColor: '#E3F2FD',
-  },
-  typeBadgePotentiel: {
-    backgroundColor: '#FFF9C4',
-  },
-  typeBadgeText: {
-    fontSize: 12,
+  activeBadgeText: {
+    fontSize: 11,
     fontWeight: '600',
+    color: Colors.accent,
   },
-  typeBadgeTextFidele: {
-    color: '#2E7D32',
+  clientFooter: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
-  typeBadgeTextNouveau: {
-    color: '#1565C0',
-  },
-  typeBadgeTextPotentiel: {
-    color: '#F57F17',
-  },
-  editButton: {
-    padding: 8,
-  },
-  emptyCard: {
-    marginTop: 40,
-  },
-  emptyContent: {
-    padding: 48,
+  creditBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#FF444410',
+    borderRadius: 8,
   },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    backgroundColor: Colors.gray,
-    borderRadius: 24,
+  creditText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.error,
+    marginLeft: 4,
+  },
+  emptyContainer: {
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+    paddingVertical: 60,
   },
-  emptyTitle: {
+  emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
+    color: Colors.secondary,
+    marginTop: 16,
   },
-  emptySubtitle: {
+  emptySubtext: {
     fontSize: 14,
-    color: Colors.textSecondary,
+    color: Colors.grayDark,
+    marginTop: 8,
+    marginBottom: 24,
   },
-  modalOverlay: {
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.secondary,
+  },
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
+    backgroundColor: Colors.background,
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    backgroundColor: Colors.white,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  formScroll: {
-    padding: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  typeSelector: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 24,
-  },
-  typeOption: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-  },
-  typeOptionActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  typeOptionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  typeOptionTextActive: {
-    color: Colors.secondary,
-  },
-  submitButton: {
-    marginTop: 8,
-  },
-  detailScroll: {
-    padding: 20,
-  },
-  detailAvatar: {
-    width: 80,
-    height: 80,
-    backgroundColor: Colors.primary,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  detailInitials: {
-    fontSize: 32,
+    fontSize: 18,
     fontWeight: '700',
     color: Colors.secondary,
-  },
-  detailName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.text,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  detailInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  detailInfoText: {
-    fontSize: 16,
-    color: Colors.text,
-  },
-  detailActions: {
-    marginTop: 24,
-    gap: 12,
-  },
-  deleteButton: {
-    borderColor: Colors.error,
   },
 });

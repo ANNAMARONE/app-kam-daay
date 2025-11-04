@@ -3,9 +3,8 @@
  * Gestion d'état globale compatible React Native - Version 2
  */
 
-import { create, StateCreator } from 'zustand';
+import { create } from 'zustand';
 import {
-  // 🚨 MODIFICATION 1: Importer la CLASSE, pas l'instance synchrone 'database'
   KameDaayDatabase,
   Client,
   Vente,
@@ -18,17 +17,29 @@ import {
   Rappel,
 } from './database';
 
-// 🚨 NOUVEAU: Le store ne peut plus utiliser 'database' directement.
-// Nous aurons besoin d'une instance de la DB.
+// 🚨 VARIABLE GLOBALE: L'instance de la DB est stockée ici.
 let databaseInstance: KameDaayDatabase | null = null;
 
-// Vous devrez appeler cette fonction dans votre App.tsx (ou équivalent)
+// Fonction utilisée par App.tsx pour injecter l'instance
 export const setDatabaseInstance = (db: KameDaayDatabase) => {
   databaseInstance = db;
 };
 
+// 🚨 NOUVEAU: Getter pour récupérer l'instance (utilisé par ParametresPage et autres)
+export const getDatabaseInstance = (): KameDaayDatabase | null => {
+    return databaseInstance;
+};
 
-// Cette interface est inchangée
+// Fonction utilitaire pour obtenir l'instance de DB de manière sécurisée
+const getDb = (): KameDaayDatabase => {
+    if (!databaseInstance) {
+        // Dans un environnement de production/final, cela doit être géré par l'écran de chargement dans App.tsx
+        throw new Error("Database not initialized. Call setDatabaseInstance first.");
+    }
+    return databaseInstance;
+};
+
+
 interface AppState {
   // Data
   clients: Client[];
@@ -40,13 +51,13 @@ interface AppState {
   depenses: Depense[];
   rappels: Rappel[];
   isLoading: boolean;
-  isDbReady: boolean; // Ajout d'un indicateur pour l'état de la DB
+  isDbReady: boolean;
 
   // Actions
   loadData: () => Promise<void>;
-  // ... (toutes les autres actions)
+  
   // Clients
-  addClient: (client: Client) => Promise<void>;
+  addClient: (client: Omit<Client, 'id'>) => Promise<void>;
   updateClient: (id: number, client: Partial<Client>) => Promise<void>;
   deleteClient: (id: number) => Promise<void>;
 
@@ -58,10 +69,10 @@ interface AppState {
   addTemplate: (template: Omit<Template, 'id'>) => Promise<void>;
   deleteTemplate: (id: number) => Promise<void>;
 
-  // Interactions (Implémentation ajoutée)
+  // Interactions
   addInteraction: (interaction: Omit<Interaction, 'id'>) => Promise<void>;
 
-  // Produits (Implémentation ajoutée)
+  // Produits
   addProduit: (produit: Omit<Produit, 'id'>) => Promise<void>;
   updateProduit: (id: number, produit: Partial<Produit>) => Promise<void>;
   deleteProduit: (id: number) => Promise<void>;
@@ -69,9 +80,10 @@ interface AppState {
   // Paiements
   addPaiement: (paiement: Omit<Paiement, 'id'>) => Promise<void>;
 
-  // Objectifs (Implémentation ajoutée)
+  // Objectifs
   addObjectif: (objectif: Omit<Objectif, 'id'>) => Promise<void>;
   updateObjectif: (id: number, objectif: Partial<Objectif>) => Promise<void>;
+  deleteObjectif: (id: number) => Promise<void>; // Ajout de deleteObjectif
 
   // Depenses
   addDepense: (depense: Omit<Depense, 'id'>) => Promise<void>;
@@ -87,14 +99,6 @@ interface AppState {
   importData: (jsonData: string) => Promise<void>;
 }
 
-// Fonction utilitaire pour obtenir l'instance de DB de manière sécurisée
-const getDb = (): KameDaayDatabase => {
-    if (!databaseInstance) {
-        throw new Error("Database not initialized. Call setDatabaseInstance first.");
-    }
-    return databaseInstance;
-};
-
 
 export const useStore = create<AppState>((set, get) => ({
   clients: [],
@@ -106,10 +110,9 @@ export const useStore = create<AppState>((set, get) => ({
   depenses: [],
   rappels: [],
   isLoading: true,
-  isDbReady: false, // 🚨 NOUVEAU: Initialisation de l'état de la DB
+  isDbReady: false,
 
   loadData: async () => {
-    // 🚨 Vérification avant l'accès à la DB
     if (!databaseInstance) {
         console.warn("Attempted to load data before database was ready.");
         set({ isLoading: false });
@@ -121,11 +124,11 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const clients = await db.getAllClients();
       const ventes = await db.getAllVentes();
-      const templates = await db.getAllTemplates();
-      // NOTE: Produits et Objectifs ne sont pas implémentés dans getAll* dans database.ts. 
-      // Nous allons les laisser vides ici si les méthodes n'existent pas.
-      const produits: Produit[] = []; // Assumer vide ou appeler db.getAllProduits() si implémenté
-      const objectifs: Objectif[] = []; // Assumer vide ou appeler db.getAllObjectifs() si implémenté
+      let templates = await db.getAllTemplates();
+      
+      // 🚨 CORRECTION: Maintenant ces méthodes existent dans KameDaayDatabase
+      const produits = await db.getAllProduits(); 
+      const objectifs = await db.getAllObjectifs();
       
       const paiements = await db.getAllPaiements();
       const depenses = await db.getAllDepenses();
@@ -135,39 +138,28 @@ export const useStore = create<AppState>((set, get) => ({
       if (templates.length === 0) {
         await db.addTemplate({
           nom: 'Bienvenue',
-          message: 'Bonjour {{nom_client}}, bienvenue chez nous! Merci de votre confiance.'
+          message: 'Bonjour {{prenom_client}} {{nom_client}}, bienvenue chez nous! Merci de votre confiance.'
         });
         await db.addTemplate({
-          nom: 'Rappel',
-          message: 'Bonjour {{nom_client}}, nous vous rappelons votre commande. Merci!'
+          nom: 'Rappel Paiement',
+          message: 'Bonjour {{prenom_client}}, nous vous rappelons votre dette de {{montant_du}} sur la vente du {{date_vente}}. Merci!'
         });
-        const updatedTemplates = await db.getAllTemplates();
-        set({
-          clients,
-          ventes,
-          templates: updatedTemplates,
-          produits,
-          paiements,
-          objectifs,
-          depenses,
-          rappels,
-          isLoading: false,
-          isDbReady: true // DB prête après le chargement
-        });
-      } else {
-        set({
-          clients,
-          ventes,
-          templates,
-          produits,
-          paiements,
-          objectifs,
-          depenses,
-          rappels,
-          isLoading: false,
-          isDbReady: true // DB prête après le chargement
-        });
+        templates = await db.getAllTemplates(); // Recharger après l'ajout
       }
+
+      set({
+        clients,
+        ventes,
+        templates,
+        produits,
+        paiements,
+        objectifs,
+        depenses,
+        rappels,
+        isLoading: false,
+        isDbReady: true
+      });
+      
     } catch (error) {
       console.error('Erreur de chargement:', error);
       set({ isLoading: false, isDbReady: false });
@@ -177,7 +169,7 @@ export const useStore = create<AppState>((set, get) => ({
   // --- Clients ---
   addClient: async (client) => {
     const db = getDb();
-    await db.addClient(client);
+    await db.addClient(client as Client);
     const clients = await db.getAllClients();
     set({ clients });
   },
@@ -199,7 +191,7 @@ export const useStore = create<AppState>((set, get) => ({
   // --- Ventes ---
   addVente: async (vente) => {
     const db = getDb();
-    // Le Omit est ignoré car addVente s'attend à Vente, mais sans 'id'. Le cast est correct.
+    // Le cast est nécessaire ici pour satisfaire l'interface de db.addVente
     await db.addVente(vente as Vente); 
     const ventes = await db.getAllVentes();
 
@@ -232,28 +224,38 @@ export const useStore = create<AppState>((set, get) => ({
     set({ templates });
   },
 
-  // --- Interactions (Méthode addInteraction non implémentée, ici un placeholder) ---
+  // ------------------------------------
+  // 🚨 CORRECTION: Interactions (Utilise la DB)
+  // ------------------------------------
   addInteraction: async (interaction) => {
-    // 🚨 CORRECTION: Assurez-vous d'implémenter db.addInteraction dans database.ts si vous souhaitez sauvegarder les données.
-    console.warn('Action addInteraction non implémentée dans la base de données.');
-    // Si vous aviez implémenté db.addInteraction :
-    // const db = getDb();
-    // await db.addInteraction(interaction as Interaction);
-    // ... code de mise à jour du store si nécessaire
+    const db = getDb();
+    await db.addInteraction(interaction as Interaction);
+    // Pas de mise à jour du store pour les interactions ici, car elles ne sont pas chargées.
+    // Si elles étaient chargées, il faudrait appeler db.getAllInteractions().
   },
 
-  // --- Produits (Méthodes non implémentées, ici des placeholders) ---
+  // ------------------------------------
+  // 🚨 CORRECTION: Produits (Utilise la DB)
+  // ------------------------------------
   addProduit: async (produit) => {
-    // 🚨 CORRECTION: Assurez-vous d'implémenter db.addProduit, db.getAllProduits, etc.
-    console.warn('Action addProduit non implémentée dans la base de données.');
+    const db = getDb();
+    await db.addProduit(produit as Produit);
+    const produits = await db.getAllProduits();
+    set({ produits });
   },
 
   updateProduit: async (id, produit) => {
-    console.warn('Action updateProduit non implémentée dans la base de données.');
+    const db = getDb();
+    await db.updateProduit(id, produit);
+    const produits = await db.getAllProduits();
+    set({ produits });
   },
 
   deleteProduit: async (id) => {
-    console.warn('Action deleteProduit non implémentée dans la base de données.');
+    const db = getDb();
+    await db.deleteProduit(id);
+    const produits = await db.getAllProduits();
+    set({ produits });
   },
 
   // --- Paiements ---
@@ -264,14 +266,28 @@ export const useStore = create<AppState>((set, get) => ({
     set({ paiements });
   },
 
-  // --- Objectifs (Méthodes non implémentées, ici des placeholders) ---
+  // ------------------------------------
+  // 🚨 CORRECTION: Objectifs (Utilise la DB)
+  // ------------------------------------
   addObjectif: async (objectif) => {
-    // 🚨 CORRECTION: Assurez-vous d'implémenter db.addObjectif et db.getAllObjectifs.
-    console.warn('Action addObjectif non implémentée dans la base de données.');
+    const db = getDb();
+    await db.addObjectif(objectif as Objectif);
+    const objectifs = await db.getAllObjectifs();
+    set({ objectifs });
   },
 
   updateObjectif: async (id, objectif) => {
-    console.warn('Action updateObjectif non implémentée dans la base de données.');
+    const db = getDb();
+    await db.updateObjectif(id, objectif);
+    const objectifs = await db.getAllObjectifs();
+    set({ objectifs });
+  },
+  
+  deleteObjectif: async (id) => {
+    const db = getDb();
+    await db.deleteObjectif(id);
+    const objectifs = await db.getAllObjectifs();
+    set({ objectifs });
   },
 
   // --- Depenses ---
@@ -321,14 +337,12 @@ export const useStore = create<AppState>((set, get) => ({
     const db = getDb();
     await db.importAllData(jsonData);
     
-    // Recharger toutes les données après l'import
+    // Recharger toutes les données après l'import pour mettre à jour l'état
     const clients = await db.getAllClients();
     const ventes = await db.getAllVentes();
     const templates = await db.getAllTemplates();
-    // NOTE: produits et objectifs restent vides si non implémentés
-    const produits: Produit[] = []; 
-    const objectifs: Objectif[] = []; 
-    
+    const produits = await db.getAllProduits();
+    const objectifs = await db.getAllObjectifs();
     const paiements = await db.getAllPaiements();
     const depenses = await db.getAllDepenses();
     const rappels = await db.getAllRappels();

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from './ui/Button';
 import { Card, CardContent } from './ui/Card';
-import Colors from './../constants/Colors';
+import Colors from '../constants/Colors';
 
 interface CalculatriceProps {
   visible: boolean;

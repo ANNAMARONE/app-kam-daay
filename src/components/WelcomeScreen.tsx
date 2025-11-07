@@ -14,9 +14,10 @@ import { getBackendUrl, testBackendConnection } from '../lib/network-helper';
 interface WelcomeScreenProps {
   onLogin: () => void;
   onSignup: () => void;
+  onDebug?: () => void;
 }
 
-export default function WelcomeScreen({ onLogin, onSignup }: WelcomeScreenProps) {
+export default function WelcomeScreen({ onLogin, onSignup, onDebug }: WelcomeScreenProps) {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const [backendUrl, setBackendUrl] = useState<string>('');
 
@@ -40,13 +41,19 @@ export default function WelcomeScreen({ onLogin, onSignup }: WelcomeScreenProps)
       
       {/* Indicateur de connexion backend (mode dev uniquement) */}
       {__DEV__ && (
-        <View style={[styles.debugBanner, backendStatus === 'ok' ? styles.debugOk : styles.debugError]}>
+        <TouchableOpacity 
+          onPress={onDebug}
+          style={[styles.debugBanner, backendStatus === 'ok' ? styles.debugOk : styles.debugError]}
+        >
           <Text style={styles.debugText}>
             {backendStatus === 'checking' ? '🔍 Vérification backend...' : 
              backendStatus === 'ok' ? `✅ Backend: ${backendUrl}` : 
              `❌ Backend inaccessible: ${backendUrl}`}
           </Text>
-        </View>
+          <Text style={styles.debugSubtext}>
+            Appuie pour voir le diagnostic complet
+          </Text>
+        </TouchableOpacity>
       )}
       
       <LinearGradient
@@ -160,6 +167,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     fontWeight: '600',
+  },
+  debugSubtext: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    textAlign: 'center',
+    marginTop: 2,
+    opacity: 0.9,
   },
   gradient: {
     flex: 1,

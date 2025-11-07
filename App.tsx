@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 
@@ -24,8 +24,8 @@ import ParametresPage from './src/components/ParametresPage';
 import WelcomeScreen from './src/components/WelcomeScreen';
 import LoginScreen from './src/components/LoginScreen';
 import SignupScreen from './src/components/SignupScreen';
-import SyncStatusBar from './src/components/SyncStatusBar';
 import NetworkDebugScreen from './src/components/NetworkDebugScreen';
+import BackgroundSync from './src/components/BackgroundSync';
 
 const Tab = createBottomTabNavigator();
 
@@ -36,6 +36,9 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
   onNavigate: (screen: string) => void;
   rappelsActifs?: number;
 }) {
+  const insets = useSafeAreaInsets();
+  const screenHeight = Dimensions.get('window').height;
+  
   const menuItems = [
     { 
       name: 'Statistiques', 
@@ -77,7 +80,13 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
           activeOpacity={1} 
           onPress={onClose}
         />
-        <SafeAreaView style={styles.menuContainer} edges={['bottom']}>
+        <View style={[
+          styles.menuContainer,
+          { 
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 16,
+            maxHeight: screenHeight * 0.75, // 75% de la hauteur de l'écran
+          }
+        ]}>
           {/* Header */}
           <View style={styles.menuHeader}>
             <View style={styles.menuHeaderLeft}>
@@ -95,7 +104,11 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
           </View>
 
           {/* Menu Items */}
-          <ScrollView style={styles.menuContent}>
+          <ScrollView 
+            style={styles.menuContent}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 8 }}
+          >
             {menuItems.map((item, index) => (
               <TouchableOpacity
                 key={item.name}
@@ -132,7 +145,7 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
           <View style={styles.menuFooter}>
             <Text style={styles.menuFooterText}>Kame Daay • Version 1.0</Text>
           </View>
-        </SafeAreaView>
+        </View>
       </View>
     </Modal>
   );
@@ -143,7 +156,8 @@ function MenuScreen() {
   return <View style={{ flex: 1, backgroundColor: Colors.white }} />;
 }
 
-export default function App() {
+// Composant interne pour accéder aux Safe Area Insets
+function AppContent() {
   const [dbInitialized, setDbInitialized] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const navigationRef = useRef<any>(null);
@@ -152,6 +166,7 @@ export default function App() {
   const [authScreen, setAuthScreen] = useState<'welcome' | 'login' | 'signup' | 'debug'>('welcome');
   
   const { loadData, isLoading, rappels } = useStore();
+  const insets = useSafeAreaInsets();
   
   const initializeDatabaseAndLoadData = useCallback(async () => {
     try {
@@ -171,10 +186,8 @@ export default function App() {
       setIsAuthenticated(isAuth);
       setAuthChecking(false);
       
-      if (isAuth) {
-        // Démarrer la synchronisation automatique
-        syncService.startAutoSync(5); // Toutes les 5 minutes
-      }
+      // Note: Ne pas démarrer la sync ici car la DB n'est pas encore initialisée
+      // La sync sera démarrée après l'initialisation de la DB
     };
     
     checkAuth();
@@ -186,26 +199,38 @@ export default function App() {
     }
   }, [dbInitialized, isAuthenticated, initializeDatabaseAndLoadData]);
 
-  // Synchroniser au démarrage après initialisation
+  // Démarrer la sync automatique et synchroniser après initialisation DB
   useEffect(() => {
     if (dbInitialized && isAuthenticated) {
-      // Petite attente pour laisser l'UI se charger
+      console.log('✅ DB initialisée, démarrage de la synchronisation automatique...');
+      
+      // Démarrer la synchronisation automatique (toutes les 5 minutes)
+      syncService.startAutoSync(5);
+      
+      // Synchroniser immédiatement (petite attente pour laisser l'UI se charger)
       const timer = setTimeout(async () => {
-        console.log('🔄 Synchronisation automatique au démarrage...');
-        await syncService.syncToServer();
+        console.log('🔄 Synchronisation bidirectionnelle au démarrage...');
+        // D'abord télécharger les données du serveur, puis envoyer les modifications locales
+        await syncService.fullSync();
       }, 2000);
       
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        // Arrêter la sync auto si le composant est démonté
+        syncService.stopAutoSync();
+      };
     }
   }, [dbInitialized, isAuthenticated]);
 
-  const handleAuthSuccess = async (token: string, user: any) => {
+  const handleAuthSuccess = async (token: string, user: any, isNewAccount: boolean = false) => {
     await syncService.setAccessToken(token);
     setIsAuthenticated(true);
-    // Démarrer la synchronisation automatique
-    syncService.startAutoSync(5);
-    // Synchroniser immédiatement les données du serveur
-    await syncService.syncFromServer();
+    
+    // Note: La synchronisation automatique sera démarrée automatiquement
+    // après l'initialisation de la DB (voir useEffect ci-dessus)
+    
+    // La sync sera aussi effectuée automatiquement après init DB
+    // Pas besoin de la déclencher ici pour éviter "DB non initialisée"
   };
 
   // Vérification de l'authentification
@@ -295,92 +320,93 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider>
+    <>
       <NavigationContainer ref={navigationRef}>
-        {/* Barre de statut de synchronisation */}
-        <SyncStatusBar />
-        
-        <Tab.Navigator
-          screenOptions={({ route }) => ({
-              tabBarIcon: ({ focused, color, size }) => {
-                let iconName: keyof typeof Ionicons.glyphMap;
+        {/* Synchronisation automatique en arrière-plan */}
+        <BackgroundSync />
+      
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+            tabBarIcon: ({ focused, color, size }) => {
+              let iconName: keyof typeof Ionicons.glyphMap;
 
-                switch (route.name) {
-                  case 'Dashboard':
-                    iconName = focused ? 'home' : 'home-outline';
-                    break;
-                  case 'Clients':
-                    iconName = focused ? 'people' : 'people-outline';
-                    break;
-                  case 'Ventes':
-                    iconName = focused ? 'cart' : 'cart-outline';
-                    break;
-                  case 'Credits':
-                    iconName = focused ? 'card' : 'card-outline';
-                    break;
-                  case 'Menu':
-                    iconName = focused ? 'menu' : 'menu-outline';
-                    break;
-                  default:
-                    iconName = 'home-outline';
-                }
+              switch (route.name) {
+                case 'Dashboard':
+                  iconName = focused ? 'home' : 'home-outline';
+                  break;
+                case 'Clients':
+                  iconName = focused ? 'people' : 'people-outline';
+                  break;
+                case 'Ventes':
+                  iconName = focused ? 'cart' : 'cart-outline';
+                  break;
+                case 'Credits':
+                  iconName = focused ? 'card' : 'card-outline';
+                  break;
+                case 'Menu':
+                  iconName = focused ? 'menu' : 'menu-outline';
+                  break;
+                default:
+                  iconName = 'home-outline';
+              }
 
-                return (
-                  <View style={styles.tabIconContainer}>
-                    {focused && <View style={styles.tabIndicator} />}
-                    <View style={[
-                      styles.tabIconWrapper,
-                      focused && styles.tabIconWrapperActive
-                    ]}>
-                      <Ionicons name={iconName} size={size} color={color} />
-                      {route.name === 'Menu' && rappelsActifs > 0 && (
-                        <View style={styles.badge}>
-                          <Text style={styles.badgeText}>
-                            {rappelsActifs > 99 ? '99+' : String(rappelsActifs)}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+              return (
+                <View style={styles.tabIconContainer}>
+                  {focused && <View style={styles.tabIndicator} />}
+                  <View style={[
+                    styles.tabIconWrapper,
+                    focused && styles.tabIconWrapperActive
+                  ]}>
+                    <Ionicons name={iconName} size={size} color={color} />
+                    {route.name === 'Menu' && rappelsActifs > 0 && (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>
+                          {rappelsActifs > 99 ? '99+' : String(rappelsActifs)}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                );
-              },
-              tabBarActiveTintColor: Colors.primary,
-              tabBarInactiveTintColor: Colors.grayDark,
-              tabBarStyle: {
-                height: 70,
-                paddingBottom: 8,
-                paddingTop: 8,
-                backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                borderTopWidth: 1,
-                borderTopColor: 'rgba(0, 77, 64, 0.1)',
-                shadowColor: Colors.black,
-                shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.1,
-                shadowRadius: 12,
-                elevation: 8,
-              },
-              tabBarLabelStyle: {
-                fontSize: 11,
-                fontWeight: '600',
-                marginTop: 4,
-                marginBottom: 2,
-              },
-              tabBarItemStyle: {
-                paddingVertical: 4,
-              },
-              headerStyle: {
-                backgroundColor: Colors.secondary,
-                elevation: 0,
-                shadowOpacity: 0,
-              },
-              headerTintColor: Colors.white,
-              headerTitleStyle: {
-                fontWeight: '600',
-                fontSize: 18,
-              },
-              headerShown: false,
-            })}
-        >
+                </View>
+              );
+            },
+            tabBarActiveTintColor: Colors.primary,
+            tabBarInactiveTintColor: Colors.grayDark,
+            tabBarStyle: {
+              height: 64 + insets.bottom, // Hauteur fixe + safe area
+              paddingBottom: insets.bottom > 0 ? insets.bottom : 8, // Safe area ou padding par défaut
+              paddingTop: 8,
+              backgroundColor: 'rgba(255, 255, 255, 0.98)',
+              borderTopWidth: 1,
+              borderTopColor: 'rgba(0, 77, 64, 0.1)',
+              shadowColor: Colors.black,
+              shadowOffset: { width: 0, height: -4 },
+              shadowOpacity: 0.1,
+              shadowRadius: 12,
+              elevation: 8,
+            },
+            tabBarLabelStyle: {
+              fontSize: 11,
+              fontWeight: '600',
+              marginTop: 2,
+              marginBottom: 0,
+            },
+            tabBarItemStyle: {
+              paddingVertical: 4,
+              paddingHorizontal: 4, // Plus d'espace horizontal entre les icônes
+            },
+            headerStyle: {
+              backgroundColor: Colors.secondary,
+              elevation: 0,
+              shadowOpacity: 0,
+            },
+            headerTintColor: Colors.white,
+            headerTitleStyle: {
+              fontWeight: '600',
+              fontSize: 18,
+            },
+            headerShown: false,
+          })}
+      >
           <Tab.Screen
             name="Dashboard"
             component={Dashboard}
@@ -448,16 +474,26 @@ export default function App() {
             }}
           />
         </Tab.Navigator>
-
-        {/* Menu Burger */}
-        <MenuBurger
-          visible={menuVisible}
-          onClose={() => setMenuVisible(false)}
-          onNavigate={handleNavigateFromMenu}
-          rappelsActifs={rappelsActifs}
-        />
       </NavigationContainer>
+
+      {/* Menu Burger */}
+      <MenuBurger
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onNavigate={handleNavigateFromMenu}
+        rappelsActifs={rappelsActifs}
+      />
+      
       <Toast />
+    </>
+  );
+}
+
+// Composant principal App qui fournit le SafeAreaProvider
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppContent />
     </SafeAreaProvider>
   );
 }
@@ -523,12 +559,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    height: 44,
+    height: 48,
+    width: '100%',
   },
   tabIndicator: {
     position: 'absolute',
-    top: -12,
-    width: 48,
+    top: -8,
+    width: 32,
     height: 3,
     backgroundColor: Colors.primary,
     borderRadius: 2,
@@ -539,11 +576,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   tabIconWrapper: {
-    padding: 6,
-    borderRadius: 14,
+    padding: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabIconWrapperActive: {
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    backgroundColor: 'rgba(255, 215, 0, 0.12)',
   },
   badge: {
     position: 'absolute',
@@ -576,7 +615,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
     shadowColor: Colors.black,
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.2,

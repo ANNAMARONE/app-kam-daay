@@ -6,14 +6,10 @@
 
 import { getBackendUrl } from './network-helper';
 
-// ⚠️ IMPORTANT : L'IP est détectée automatiquement via Expo
-// Si ça ne fonctionne pas, remplace DEV_API_URL par ton IP manuellement
-// Exemple : const DEV_API_URL = 'http://192.168.1.105:3001/api';
-
-/**
- * URL de développement - Détection automatique de l'IP
- */
-const DEV_API_URL = __DEV__ ? getBackendUrl(3001) : 'http://localhost:3001/api/';
+// ⚠️ IMPORTANT : Configuration manuelle de l'IP
+// Remplace cette IP par l'IP de ton ordinateur
+// Pour trouver ton IP : hostname -I | awk '{print $1}'
+const MANUAL_IP = '192.168.1.105'; // ⬅️ CHANGE MOI !
 
 /**
  * URL de production
@@ -27,14 +23,8 @@ const PROD_API_URL = 'https://votre-domaine.com/api';
  * Configuration de l'API
  */
 export const API_CONFIG = {
-  // URL de développement (localhost ou IP locale)
-  DEV_URL: DEV_API_URL,
-  
-  // URL de production
-  PROD_URL: PROD_API_URL,
-  
-  // URL active basée sur l'environnement
-  BASE_URL: __DEV__ ? DEV_API_URL : PROD_API_URL,
+  // Port du backend
+  PORT: 3001,
   
   // Timeout pour les requêtes (en millisecondes)
   TIMEOUT: 30000, // 30 secondes
@@ -47,9 +37,29 @@ export const API_CONFIG = {
 
 /**
  * Obtenir l'URL de base de l'API
+ * 
+ * Cette fonction détecte automatiquement l'IP en mode dev,
+ * avec fallback sur MANUAL_IP si la détection échoue
  */
 export const getApiUrl = (): string => {
-  return API_CONFIG.BASE_URL;
+  if (__DEV__) {
+    // Essayer la détection auto
+    const autoUrl = getBackendUrl(API_CONFIG.PORT);
+    
+    // Si la détection a réussi (pas localhost), utiliser autoUrl
+    if (!autoUrl.includes('localhost')) {
+      console.log('✅ URL auto-détectée:', autoUrl);
+      return autoUrl;
+    }
+    
+    // Sinon, utiliser l'IP manuelle
+    const manualUrl = `http://${MANUAL_IP}:${API_CONFIG.PORT}/api`;
+    console.log('⚠️ Utilisation de l\'IP manuelle:', manualUrl);
+    return manualUrl;
+  }
+  
+  // En production
+  return PROD_API_URL;
 };
 
 /**

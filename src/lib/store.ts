@@ -16,6 +16,7 @@ import {
   Depense,
   Rappel,
 } from './database';
+import { syncService } from './sync';
 
 // 🚨 VARIABLE GLOBALE: L'instance de la DB est stockée ici.
 let databaseInstance: KameDaayDatabase | null = null;
@@ -37,6 +38,23 @@ const getDb = (): KameDaayDatabase => {
         throw new Error("Database not initialized. Call setDatabaseInstance first.");
     }
     return databaseInstance;
+};
+
+// Timer pour la synchronisation automatique
+let autoSyncTimer: NodeJS.Timeout | null = null;
+
+// Déclencher la synchronisation automatique après 2 secondes
+const triggerAutoSync = () => {
+  // Annuler le timer précédent s'il existe
+  if (autoSyncTimer) {
+    clearTimeout(autoSyncTimer);
+  }
+  
+  // Planifier une nouvelle sync dans 2 secondes
+  autoSyncTimer = setTimeout(async () => {
+    console.log('🔄 Déclenchement de la synchronisation automatique...');
+    await syncService.syncToServer();
+  }, 2000);
 };
 
 
@@ -172,6 +190,8 @@ export const useStore = create<AppState>((set, get) => ({
     await db.addClient(client as Client);
     const clients = await db.getAllClients();
     set({ clients });
+    // Déclencher la synchronisation automatique
+    triggerAutoSync();
   },
 
   updateClient: async (id, client) => {
@@ -179,6 +199,8 @@ export const useStore = create<AppState>((set, get) => ({
     await db.updateClient(id, client);
     const clients = await db.getAllClients();
     set({ clients });
+    // Déclencher la synchronisation automatique
+    triggerAutoSync();
   },
 
   deleteClient: async (id) => {
@@ -200,6 +222,8 @@ export const useStore = create<AppState>((set, get) => ({
     const clients = await db.getAllClients();
 
     set({ ventes, clients });
+    // Déclencher la synchronisation automatique
+    triggerAutoSync();
   },
 
   updateVente: async (id, vente) => {
@@ -207,6 +231,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.updateVente(id, vente);
     const ventes = await db.getAllVentes();
     set({ ventes });
+    triggerAutoSync();
   },
 
   // --- Templates ---
@@ -215,6 +240,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.addTemplate(template as Template);
     const templates = await db.getAllTemplates();
     set({ templates });
+    triggerAutoSync();
   },
 
   deleteTemplate: async (id) => {
@@ -222,6 +248,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.deleteTemplate(id);
     const templates = await db.getAllTemplates();
     set({ templates });
+    triggerAutoSync();
   },
 
   // ------------------------------------
@@ -242,6 +269,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.addProduit(produit as Produit);
     const produits = await db.getAllProduits();
     set({ produits });
+    triggerAutoSync();
   },
 
   updateProduit: async (id, produit) => {
@@ -249,6 +277,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.updateProduit(id, produit);
     const produits = await db.getAllProduits();
     set({ produits });
+    triggerAutoSync();
   },
 
   deleteProduit: async (id) => {
@@ -256,6 +285,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.deleteProduit(id);
     const produits = await db.getAllProduits();
     set({ produits });
+    triggerAutoSync();
   },
 
   // --- Paiements ---
@@ -264,6 +294,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.addPaiement(paiement as Paiement);
     const paiements = await db.getAllPaiements();
     set({ paiements });
+    triggerAutoSync();
   },
 
   // ------------------------------------
@@ -274,6 +305,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.addObjectif(objectif as Objectif);
     const objectifs = await db.getAllObjectifs();
     set({ objectifs });
+    triggerAutoSync();
   },
 
   updateObjectif: async (id, objectif) => {
@@ -281,6 +313,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.updateObjectif(id, objectif);
     const objectifs = await db.getAllObjectifs();
     set({ objectifs });
+    triggerAutoSync();
   },
   
   deleteObjectif: async (id) => {
@@ -288,6 +321,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.deleteObjectif(id);
     const objectifs = await db.getAllObjectifs();
     set({ objectifs });
+    triggerAutoSync();
   },
 
   // --- Depenses ---
@@ -296,6 +330,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.addDepense(depense as Depense);
     const depenses = await db.getAllDepenses();
     set({ depenses });
+    triggerAutoSync();
   },
 
   deleteDepense: async (id) => {
@@ -303,6 +338,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.deleteDepense(id);
     const depenses = await db.getAllDepenses();
     set({ depenses });
+    triggerAutoSync();
   },
 
   // --- Rappels ---
@@ -311,6 +347,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.addRappel(rappel as Rappel);
     const rappels = await db.getAllRappels();
     set({ rappels });
+    triggerAutoSync();
   },
 
   updateRappel: async (id, rappel) => {
@@ -318,6 +355,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.updateRappel(id, rappel);
     const rappels = await db.getAllRappels();
     set({ rappels });
+    triggerAutoSync();
   },
 
   deleteRappel: async (id) => {
@@ -325,6 +363,7 @@ export const useStore = create<AppState>((set, get) => ({
     await db.deleteRappel(id);
     const rappels = await db.getAllRappels();
     set({ rappels });
+    triggerAutoSync();
   },
 
   // --- Backup & Restore ---

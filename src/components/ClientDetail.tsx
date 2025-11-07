@@ -106,7 +106,7 @@ export default function ClientDetail({ client, onClose, onEdit }: ClientDetailPr
   };
 
   const envoyerRappel = () => {
-    const message = `Bonjour ${client.prenom},\n\nCeci est un rappel concernant votre crédit de ${formatCurrency(credit)}.\n\nMerci de régler votre compte dès que possible.\n\nCordialement.`;
+    const message = `Bonjour ${client.prenom},\n\nCeci est un rappel concernant votre crédit de ${formatCurrency(credit)} FCFA.\n\nMerci de régler votre compte dès que possible.\n\nCordialement.`;
     sendWhatsAppMessage(message);
   };
 

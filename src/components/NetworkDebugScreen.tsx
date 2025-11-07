@@ -309,7 +309,6 @@ const styles = StyleSheet.create({
   statusIcon: {
     fontSize: 48,
     marginBottom: 12,
-    gap: 12,
   },
   statusTitle: {
     fontSize: 20,

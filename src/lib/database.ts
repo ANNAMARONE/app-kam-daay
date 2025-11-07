@@ -247,6 +247,22 @@ export class KameDaayDatabase {
     await this.db.runAsync('DELETE FROM clients WHERE id = ?', [id]);
   }
 
+  async getClientByPhone(telephone: string): Promise<Client | null> {
+    const result = await this.db.getAllAsync<Client>(
+      'SELECT * FROM clients WHERE telephone = ? LIMIT 1',
+      [telephone]
+    );
+    return result.length > 0 ? result[0] : null;
+  }
+
+  async getClientById(id: number): Promise<Client | null> {
+    const result = await this.db.getAllAsync<Client>(
+      'SELECT * FROM clients WHERE id = ? LIMIT 1',
+      [id]
+    );
+    return result.length > 0 ? result[0] : null;
+  }
+
   // === VENTES ===
   async addVente(vente: Vente): Promise<number> {
     const result = await this.db.runAsync(

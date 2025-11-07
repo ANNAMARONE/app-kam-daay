@@ -32,9 +32,9 @@ export default function ClientsList() {
   // Calculer le solde crédit pour un client
   const getClientCredit = (clientId: number) => {
     const clientVentes = ventes.filter(v => v.clientId === clientId);
-    const totalVentes = clientVentes.reduce((sum, v) => sum + v.montantTotal, 0);
+    const totalVentes = clientVentes.reduce((sum, v) => sum + (v.total || 0), 0);
     const clientPaiements = paiements.filter(p => p.clientId === clientId);
-    const totalPaiements = clientPaiements.reduce((sum, p) => sum + p.montant, 0);
+    const totalPaiements = clientPaiements.reduce((sum, p) => sum + (p.montant || 0), 0);
     return totalVentes - totalPaiements;
   };
 
@@ -157,7 +157,7 @@ export default function ClientsList() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingTop: 40,
+    paddingTop: 20,
     paddingBottom: 16,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,

@@ -328,12 +328,127 @@ class SyncService {
 
       console.log('✅ Données converties:', {
         clients: localData.clients.length,
-        ventes: localData.ventes.length
+        ventes: localData.ventes.length,
+        paiements: localData.paiements.length,
+        produits: localData.produits.length,
+        templates: localData.templates.length,
+        objectifs: localData.objectifs.length,
+        depenses: localData.depenses.length,
+        rappels: localData.rappels.length
       });
 
-      // TODO: Implémenter la logique de merge intelligente
-      // Pour l'instant on ne fait que logger
-      console.log('⚠️ Merge des données non implémenté - données uniquement loggées');
+      // Récupérer l'instance de la base de données
+      const db = getDatabaseInstance();
+      if (!db) {
+        throw new Error('Base de données non initialisée');
+      }
+
+      // Merge des données dans SQLite
+      console.log('💾 Insertion des données dans SQLite...');
+      
+      // IMPORTANT: On utilise une stratégie "serveur prioritaire"
+      // Les données du serveur écrasent les données locales en cas de conflit
+      
+      let insertedCount = 0;
+      let updatedCount = 0;
+      
+      // Clients
+      for (const client of localData.clients) {
+        try {
+          // Vérifier si le client existe déjà localement
+          const existing = await db.getClientByPhone(client.telephone);
+          if (existing) {
+            await db.updateClient(existing.id, client);
+            updatedCount++;
+            console.log(`  🔄 Client mis à jour: ${client.nom} ${client.prenom}`);
+          } else {
+            await db.addClient(client);
+            insertedCount++;
+            console.log(`  ✅ Nouveau client ajouté: ${client.nom} ${client.prenom}`);
+          }
+        } catch (error) {
+          console.error(`  ❌ Erreur client ${client.nom}:`, error);
+        }
+      }
+      
+      // Templates
+      for (const template of localData.templates) {
+        try {
+          await db.addTemplate(template);
+          insertedCount++;
+          console.log(`  ✅ Template ajouté: ${template.nom}`);
+        } catch (error) {
+          console.error(`  ❌ Erreur template ${template.nom}:`, error);
+        }
+      }
+      
+      // Produits
+      for (const produit of localData.produits) {
+        try {
+          await db.addProduit(produit);
+          insertedCount++;
+          console.log(`  ✅ Produit ajouté: ${produit.nom}`);
+        } catch (error) {
+          console.error(`  ❌ Erreur produit ${produit.nom}:`, error);
+        }
+      }
+      
+      // Ventes
+      for (const vente of localData.ventes) {
+        try {
+          await db.addVente(vente);
+          insertedCount++;
+          console.log(`  ✅ Vente ajoutée: ${vente.total} CFA`);
+        } catch (error) {
+          console.error(`  ❌ Erreur vente:`, error);
+        }
+      }
+      
+      // Paiements
+      for (const paiement of localData.paiements) {
+        try {
+          await db.addPaiement(paiement);
+          insertedCount++;
+          console.log(`  ✅ Paiement ajouté: ${paiement.montant} CFA`);
+        } catch (error) {
+          console.error(`  ❌ Erreur paiement:`, error);
+        }
+      }
+      
+      // Objectifs
+      for (const objectif of localData.objectifs) {
+        try {
+          await db.addObjectif(objectif);
+          insertedCount++;
+          console.log(`  ✅ Objectif ajouté: ${objectif.montantCible} CFA`);
+        } catch (error) {
+          console.error(`  ❌ Erreur objectif:`, error);
+        }
+      }
+      
+      // Dépenses
+      for (const depense of localData.depenses) {
+        try {
+          await db.addDepense(depense);
+          insertedCount++;
+          console.log(`  ✅ Dépense ajoutée: ${depense.montant} CFA`);
+        } catch (error) {
+          console.error(`  ❌ Erreur dépense:`, error);
+        }
+      }
+      
+      // Rappels
+      for (const rappel of localData.rappels) {
+        try {
+          await db.addRappel(rappel);
+          insertedCount++;
+          console.log(`  ✅ Rappel ajouté`);
+        } catch (error) {
+          console.error(`  ❌ Erreur rappel:`, error);
+        }
+      }
+      
+      console.log(`✅ Merge terminé: ${insertedCount} nouveaux, ${updatedCount} mis à jour`);
       
       this.updateSyncState({
         isSyncing: false,
@@ -387,14 +502,14 @@ class SyncService {
       clearInterval(this.autoSyncInterval);
     }
 
-    // Synchroniser immédiatement
-    this.syncToServer();
+    // Note: Ne pas synchroniser immédiatement ici car la DB peut ne pas être prête
+    // La synchronisation initiale est gérée dans App.tsx après init DB
 
-    // Puis toutes les X minutes
+    // Synchroniser toutes les X minutes
     this.autoSyncInterval = setInterval(async () => {
       const isAuth = await this.isAuthenticated();
       if (isAuth && !this.syncState.isSyncing) {
-        console.log('⏰ Synchronisation automatique...');
+        console.log('⏰ Synchronisation automatique périodique...');
         this.syncToServer();
       }
     }, intervalMinutes * 60 * 1000);

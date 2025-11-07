@@ -12,18 +12,41 @@ import { Client, Vente, Paiement, Produit, Template, Objectif, Depense, Rappel }
 /**
  * Génère un UUID v4 déterministe à partir d'un ID numérique et d'un type
  * Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+ * 
+ * IMPORTANT: Cette fonction génère toujours le même UUID pour un couple (id, type) donné
+ * Cela garantit la cohérence entre les synchronisations
  */
 const generateUuidFromId = (id: number, type: string): string => {
-  // Créer un hash simple basé sur l'ID et le type
-  const hash = `${type}-${id}`.split('').reduce((acc, char) => {
-    return ((acc << 5) - acc) + char.charCodeAt(0);
-  }, 0);
+  // Si l'ID est undefined, null ou 0, on log une erreur
+  if (!id) {
+    console.error(`❌ ID invalide (${id}) pour le type ${type}`);
+    throw new Error(`ID invalide pour ${type}: ${id}`);
+  }
   
-  // Convertir en chaîne hexadécimale
-  const hex = Math.abs(hash).toString(16).padStart(32, '0');
+  // Créer une chaîne unique basée sur le type et l'ID
+  const input = `${type}-${id}`;
   
-  // Formater en UUID v4
-  return `${hex.substr(0, 8)}-${hex.substr(8, 4)}-4${hex.substr(12, 3)}-${hex.substr(15, 4)}-${hex.substr(19, 12)}`;
+  // Créer un hash plus robuste avec plusieurs passes
+  let hash1 = 0;
+  let hash2 = 0;
+  
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash1 = ((hash1 << 5) - hash1) + char;
+    hash1 = hash1 & hash1; // Convert to 32bit integer
+    hash2 = ((hash2 << 7) - hash2) + char * 31;
+    hash2 = hash2 & hash2;
+  }
+  
+  // Convertir les hash en hexadécimal et les combiner
+  const hex1 = Math.abs(hash1).toString(16).padStart(16, '0');
+  const hex2 = Math.abs(hash2).toString(16).padStart(16, '0');
+  const combined = (hex1 + hex2).padStart(32, '0');
+  
+  // Formater en UUID v4 valide
+  // Version 4 UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+  // Le 4 indique la version, et y doit être 8, 9, a ou b
+  return `${combined.substring(0, 8)}-${combined.substring(8, 12)}-4${combined.substring(13, 16)}-${['8', '9', 'a', 'b'][id % 4]}${combined.substring(17, 20)}-${combined.substring(20, 32)}`;
 };
 
 // ============================================================================

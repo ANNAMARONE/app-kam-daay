@@ -4,6 +4,7 @@
  */
 
 import { Client, Vente, Paiement, Produit, Template, Objectif, Depense, Rappel } from './database';
+import { getDatabaseInstance } from './store';
 
 // ============================================================================
 // GÉNÉRATION D'UUID À PARTIR D'IDS NUMÉRIQUES
@@ -16,11 +17,17 @@ import { Client, Vente, Paiement, Produit, Template, Objectif, Depense, Rappel }
  * IMPORTANT: Cette fonction génère toujours le même UUID pour un couple (id, type) donné
  * Cela garantit la cohérence entre les synchronisations
  */
-const generateUuidFromId = (id: number, type: string): string => {
-  // Si l'ID est undefined, null ou 0, on log une erreur
-  if (!id) {
-    console.error(`❌ ID invalide (${id}) pour le type ${type}`);
-    throw new Error(`ID invalide pour ${type}: ${id}`);
+const generateUuidFromId = (id: number | undefined, type: string): string => {
+  // Vérifier que l'ID est un nombre valide
+  if (id === undefined || id === null || typeof id !== 'number' || isNaN(id) || id === 0) {
+    console.error(`❌ ID invalide pour ${type}:`, {
+      id,
+      typeofId: typeof id,
+      isNull: id === null,
+      isUndefined: id === undefined,
+      isNaN: isNaN(id as any)
+    });
+    throw new Error(`ID invalide pour ${type}: ${id} (type: ${typeof id})`);
   }
   
   // Créer une chaîne unique basée sur le type et l'ID
@@ -43,82 +50,191 @@ const generateUuidFromId = (id: number, type: string): string => {
   const hex2 = Math.abs(hash2).toString(16).padStart(16, '0');
   const combined = (hex1 + hex2).padStart(32, '0');
   
+  // Assurer que l'ID est un nombre valide pour le modulo
+  const validId = Math.abs(Math.floor(id));
+  const variantIndex = validId % 4;
+  const variant = ['8', '9', 'a', 'b'][variantIndex];
+  
+  if (variant === undefined) {
+    console.error(`❌ Variant undefined pour ${type}:`, {
+      id,
+      validId,
+      variantIndex,
+      modulo: validId % 4
+    });
+    throw new Error(`Variant undefined pour ${type}: id=${id}`);
+  }
+  
   // Formater en UUID v4 valide
   // Version 4 UUID: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
   // Le 4 indique la version, et y doit être 8, 9, a ou b
-  return `${combined.substring(0, 8)}-${combined.substring(8, 12)}-4${combined.substring(13, 16)}-${['8', '9', 'a', 'b'][id % 4]}${combined.substring(17, 20)}-${combined.substring(20, 32)}`;
+  const uuid = `${combined.substring(0, 8)}-${combined.substring(8, 12)}-4${combined.substring(13, 16)}-${variant}${combined.substring(17, 20)}-${combined.substring(20, 32)}`;
+  
+  // Vérifier que l'UUID ne contient pas "undefined"
+  if (uuid.includes('undefined')) {
+    console.error(`❌ UUID contient "undefined":`, {
+      uuid,
+      id,
+      type,
+      variant,
+      combined: combined.substring(0, 50)
+    });
+    throw new Error(`UUID invalide généré pour ${type}: ${uuid}`);
+  }
+  
+  return uuid;
 };
 
 // ============================================================================
 // MAPPING MOBILE → SERVEUR
 // ============================================================================
 
-export const mapClientToServer = (client: Client) => ({
-  id: generateUuidFromId(client.id, 'client'),
-  nom: client.nom,
-  prenom: client.prenom,
-  telephone: client.telephone,
-  email: null, // Pas dans SQLite
-  adresse: client.adresse || null,
-  notes: client.notes || null
-});
+export const mapClientToServer = (client: Client) => {
+  if (!client.id) {
+    console.error('❌ Client sans ID:', client);
+    throw new Error(`Client sans ID: ${client.nom} ${client.prenom}`);
+  }
+  
+  return {
+    id: generateUuidFromId(client.id, 'client'),
+    nom: client.nom,
+    prenom: client.prenom,
+    telephone: client.telephone,
+    email: null, // Pas dans SQLite
+    adresse: client.adresse || null,
+    notes: client.notes || null
+  };
+};
 
-export const mapVenteToServer = (vente: Vente) => ({
-  id: generateUuidFromId(vente.id, 'vente'),
-  clientId: generateUuidFromId(vente.clientId, 'client'),
-  montant: vente.total,
-  montantPaye: vente.montantPaye,
-  typePaiement: vente.statut, // 'Payé', 'Crédit', 'Partiel'
-  produits: vente.articles, // Déjà en format JSON
-  notes: null,
-  dateVente: new Date(vente.date).toISOString().slice(0, 19).replace('T', ' ')
-});
+export const mapVenteToServer = (vente: Vente) => {
+  // Log détaillé de la vente
+  console.log('🔍 Mapping vente:', {
+    id: vente.id,
+    clientId: vente.clientId,
+    typeId: typeof vente.id,
+    typeClientId: typeof vente.clientId,
+    isNaNId: isNaN(vente.id as any),
+    isNaNClientId: isNaN(vente.clientId as any)
+  });
+  
+  if (!vente.id || typeof vente.id !== 'number' || isNaN(vente.id)) {
+    console.error('❌ Vente avec ID invalide:', vente);
+    throw new Error(`Vente avec ID invalide: ${vente.id} (type: ${typeof vente.id})`);
+  }
+  
+  if (!vente.clientId || typeof vente.clientId !== 'number' || isNaN(vente.clientId)) {
+    console.error('❌ Vente avec clientId invalide:', vente);
+    throw new Error(`Vente avec clientId invalide: ${vente.clientId} (type: ${typeof vente.clientId}, venteId: ${vente.id})`);
+  }
+  
+  const venteUuid = generateUuidFromId(vente.id, 'vente');
+  const clientUuid = generateUuidFromId(vente.clientId, 'client');
+  
+  console.log(`  ✅ UUIDs générés: vente=${venteUuid}, client=${clientUuid}`);
+  
+  return {
+    id: venteUuid,
+    clientId: clientUuid,
+    montant: vente.total,
+    montantPaye: vente.montantPaye,
+    typePaiement: vente.statut, // 'Payé', 'Crédit', 'Partiel'
+    produits: vente.articles, // Déjà en format JSON
+    notes: null,
+    dateVente: new Date(vente.date).toISOString().slice(0, 19).replace('T', ' ')
+  };
+};
 
-export const mapPaiementToServer = (paiement: Paiement) => ({
-  id: generateUuidFromId(paiement.id, 'paiement'),
-  venteId: generateUuidFromId(paiement.venteId, 'vente'),
-  montant: paiement.montant,
-  notes: null,
-  datePaiement: new Date(paiement.date).toISOString().slice(0, 19).replace('T', ' ')
-});
+export const mapPaiementToServer = (paiement: Paiement) => {
+  if (!paiement.id) {
+    console.error('❌ Paiement sans ID:', paiement);
+    throw new Error(`Paiement sans ID valide`);
+  }
+  if (!paiement.venteId) {
+    console.error('❌ Paiement sans venteId:', paiement);
+    throw new Error(`Paiement sans venteId valide (paiementId: ${paiement.id})`);
+  }
+  
+  return {
+    id: generateUuidFromId(paiement.id, 'paiement'),
+    venteId: generateUuidFromId(paiement.venteId, 'vente'),
+    montant: paiement.montant,
+    notes: null,
+    datePaiement: new Date(paiement.date).toISOString().slice(0, 19).replace('T', ' ')
+  };
+};
 
-export const mapProduitToServer = (produit: Produit) => ({
-  id: generateUuidFromId(produit.id, 'produit'),
-  nom: produit.nom,
-  prix: produit.prixUnitaire,
-  description: produit.description || null
-});
+export const mapProduitToServer = (produit: Produit) => {
+  if (!produit.id) {
+    console.error('❌ Produit sans ID:', produit);
+    throw new Error(`Produit sans ID: ${produit.nom}`);
+  }
+  
+  return {
+    id: generateUuidFromId(produit.id, 'produit'),
+    nom: produit.nom,
+    prix: produit.prixUnitaire,
+    description: produit.description || null
+  };
+};
 
-export const mapTemplateToServer = (template: Template) => ({
-  id: generateUuidFromId(template.id, 'template'),
-  nom: template.nom,
-  contenu: template.message
-});
+export const mapTemplateToServer = (template: Template) => {
+  if (!template.id) {
+    console.error('❌ Template sans ID:', template);
+    throw new Error(`Template sans ID: ${template.nom}`);
+  }
+  
+  return {
+    id: generateUuidFromId(template.id, 'template'),
+    nom: template.nom,
+    contenu: template.message
+  };
+};
 
-export const mapObjectifToServer = (objectif: Objectif) => ({
-  id: generateUuidFromId(objectif.id, 'objectif'),
-  montant: objectif.montantCible,
-  periode: objectif.mois,
-  dateDebut: null,
-  dateFin: null
-});
+export const mapObjectifToServer = (objectif: Objectif) => {
+  if (!objectif.id) {
+    console.error('❌ Objectif sans ID:', objectif);
+    throw new Error(`Objectif sans ID`);
+  }
+  
+  return {
+    id: generateUuidFromId(objectif.id, 'objectif'),
+    montant: objectif.montantCible,
+    periode: objectif.mois,
+    dateDebut: null,
+    dateFin: null
+  };
+};
 
-export const mapDepenseToServer = (depense: Depense) => ({
-  id: generateUuidFromId(depense.id, 'depense'),
-  montant: depense.montant,
-  categorie: depense.categorie,
-  description: depense.description,
-  dateDepense: new Date(depense.date).toISOString().slice(0, 19).replace('T', ' ')
-});
+export const mapDepenseToServer = (depense: Depense) => {
+  if (!depense.id) {
+    console.error('❌ Dépense sans ID:', depense);
+    throw new Error(`Dépense sans ID`);
+  }
+  
+  return {
+    id: generateUuidFromId(depense.id, 'depense'),
+    montant: depense.montant,
+    categorie: depense.categorie,
+    description: depense.description,
+    dateDepense: new Date(depense.date).toISOString().slice(0, 19).replace('T', ' ')
+  };
+};
 
-export const mapRappelToServer = (rappel: Rappel) => ({
-  id: generateUuidFromId(rappel.id, 'rappel'),
-  clientId: rappel.clientId ? generateUuidFromId(rappel.clientId, 'client') : null,
-  titre: rappel.message.substring(0, 100), // Prendre les 100 premiers caractères comme titre
-  description: rappel.message,
-  dateRappel: new Date(rappel.dateLimite).toISOString().slice(0, 19).replace('T', ' '),
-  resolu: rappel.resolu ? 1 : 0
-});
+export const mapRappelToServer = (rappel: Rappel) => {
+  if (!rappel.id) {
+    console.error('❌ Rappel sans ID:', rappel);
+    throw new Error(`Rappel sans ID`);
+  }
+  
+  return {
+    id: generateUuidFromId(rappel.id, 'rappel'),
+    clientId: rappel.clientId ? generateUuidFromId(rappel.clientId, 'client') : null,
+    titre: rappel.message.substring(0, 100), // Prendre les 100 premiers caractères comme titre
+    description: rappel.message,
+    dateRappel: new Date(rappel.dateLimite).toISOString().slice(0, 19).replace('T', ' '),
+    resolu: rappel.resolu ? 1 : 0
+  };
+};
 
 // ============================================================================
 // MAPPING SERVEUR → MOBILE

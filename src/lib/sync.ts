@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { getDatabaseInstance } from './store';
 import { getApiUrl, getAuthHeaders } from './api-config';
-import { mapAllDataToServer, mapAllDataFromServer } from './sync-mapper';
+import { mapAllDataToServer, mapAllDataFromServer, mapClientFromServer } from './sync-mapper';
 
 export interface SyncState {
   lastSyncTime: number;
@@ -138,15 +138,19 @@ class SyncService {
 
   async syncToServer(): Promise<{ success: boolean; error?: string }> {
     console.log('\n📤 ========== DÉBUT SYNC VERS SERVEUR ==========');
+    console.log('⏰ Heure:', new Date().toLocaleTimeString());
     
     const isAuth = await this.isAuthenticated();
+    console.log('🔐 Authentifié:', isAuth);
     if (!isAuth) {
-      console.log('❌ Non authentifié');
+      console.log('❌ Non authentifié - sync annulée');
       return { success: false, error: "Non authentifié" };
     }
 
-    if (!(await this.isOnline())) {
-      console.log('❌ Hors ligne');
+    const isOnlineCheck = await this.isOnline();
+    console.log('📡 En ligne:', isOnlineCheck);
+    if (!isOnlineCheck) {
+      console.log('❌ Hors ligne - sync annulée');
       return { success: false, error: "Hors ligne" };
     }
 
@@ -185,6 +189,28 @@ class SyncService {
         rappels: localData.rappels.length
       });
 
+      // Log des ventes pour débogage
+      if (localData.ventes.length > 0) {
+        console.log('🔍 Exemple de vente locale AVANT conversion:', {
+          id: localData.ventes[0].id,
+          clientId: localData.ventes[0].clientId,
+          total: localData.ventes[0].total,
+          typeofId: typeof localData.ventes[0].id,
+          typeofClientId: typeof localData.ventes[0].clientId
+        });
+        
+        // Vérifier toutes les ventes pour clientId invalide
+        localData.ventes.forEach((vente, index) => {
+          if (!vente.id || !vente.clientId) {
+            console.error(`❌ Vente ${index} a des IDs invalides:`, {
+              id: vente.id,
+              clientId: vente.clientId,
+              total: vente.total
+            });
+          }
+        });
+      }
+
       // Convertir au format serveur
       console.log('🔄 Conversion au format serveur...');
       const serverData = mapAllDataToServer(localData);
@@ -200,9 +226,28 @@ class SyncService {
         rappels: serverData.rappels.length
       });
 
+      // Sauvegarder les mappings UUID ↔ ID local
+      console.log('💾 Sauvegarde des mappings UUID...');
+      for (let i = 0; i < localData.clients.length; i++) {
+        const localClient = localData.clients[i];
+        const serverClient = serverData.clients[i];
+        if (localClient.id && serverClient.id) {
+          await db.saveUuidMapping(serverClient.id, localClient.id, 'client');
+        }
+      }
+
       // Log d'un exemple de client pour vérification
       if (serverData.clients.length > 0) {
         console.log('📋 Exemple de client converti:', serverData.clients[0]);
+      }
+      
+      // Log d'une vente convertie pour vérification
+      if (serverData.ventes.length > 0) {
+        console.log('📋 Exemple de vente convertie:', {
+          id: serverData.ventes[0].id,
+          clientId: serverData.ventes[0].clientId,
+          montant: serverData.ventes[0].montant
+        });
       }
 
       // Envoyer au serveur
@@ -352,22 +397,44 @@ class SyncService {
       let insertedCount = 0;
       let updatedCount = 0;
       
+      // Nettoyer les ventes corrompues avant la synchronisation
+      if (typeof db.cleanupCorruptedVentes === 'function') {
+        await db.cleanupCorruptedVentes();
+      } else {
+        console.warn('⚠️ cleanupCorruptedVentes non disponible, rechargez l\'app');
+      }
+      
+      // Créer un mapping UUID → ID local pour les clients
+      const clientUuidToLocalId = new Map<string, number>();
+      
       // Clients
-      for (const client of localData.clients) {
+      for (const serverClient of serverData.clients || []) {
         try {
-          // Vérifier si le client existe déjà localement
-          const existing = await db.getClientByPhone(client.telephone);
-          if (existing) {
-            await db.updateClient(existing.id, client);
+          // Vérifier si le client existe déjà localement (par téléphone)
+          const existing = await db.getClientByPhone(serverClient.telephone);
+          
+          if (existing && existing.id !== undefined) {
+            // Mettre à jour le client existant
+            await db.updateClient(existing.id, mapClientFromServer(serverClient));
             updatedCount++;
-            console.log(`  🔄 Client mis à jour: ${client.nom} ${client.prenom}`);
+            console.log(`  🔄 Client mis à jour: ${serverClient.nom} ${serverClient.prenom}`);
+            
+            // Sauvegarder le mapping UUID → ID local
+            clientUuidToLocalId.set(serverClient.id, existing.id);
+            await db.saveUuidMapping(serverClient.id, existing.id, 'client');
           } else {
-            await db.addClient(client);
+            // Ajouter un nouveau client
+            const convertedClient = mapClientFromServer(serverClient);
+            const localId = await db.addClient(convertedClient);
             insertedCount++;
-            console.log(`  ✅ Nouveau client ajouté: ${client.nom} ${client.prenom}`);
+            console.log(`  ✅ Nouveau client ajouté: ${serverClient.nom} ${serverClient.prenom}`);
+            
+            // Sauvegarder le mapping UUID → ID local
+            clientUuidToLocalId.set(serverClient.id, localId);
+            await db.saveUuidMapping(serverClient.id, localId, 'client');
           }
         } catch (error) {
-          console.error(`  ❌ Erreur client ${client.nom}:`, error);
+          console.error(`  ❌ Erreur client ${serverClient.nom}:`, error);
         }
       }
       
@@ -393,27 +460,42 @@ class SyncService {
         }
       }
       
-      // Ventes
-      for (const vente of localData.ventes) {
+      // Ventes (avec mapping des UUIDs vers IDs locaux)
+      for (const serverVente of serverData.ventes || []) {
         try {
+          // Récupérer l'ID local du client à partir de son UUID
+          const localClientId = clientUuidToLocalId.get(serverVente.client_id) || 
+                                await db.getLocalIdFromUuid(serverVente.client_id, 'client');
+          
+          if (!localClientId) {
+            console.warn(`  ⚠️ Client UUID ${serverVente.client_id} introuvable localement, vente ignorée`);
+            continue;
+          }
+          
+          // Créer la vente avec l'ID local du client
+          const vente = {
+            clientId: localClientId,
+            articles: typeof serverVente.produits === 'string' 
+              ? JSON.parse(serverVente.produits) 
+              : serverVente.produits || [],
+            total: serverVente.montant,
+            montantPaye: serverVente.montant_paye,
+            statut: serverVente.type_paiement as 'Payé' | 'Crédit' | 'Partiel',
+            date: new Date(serverVente.date_vente || Date.now()).getTime()
+          };
+          
           await db.addVente(vente);
           insertedCount++;
-          console.log(`  ✅ Vente ajoutée: ${vente.total} CFA`);
+          console.log(`  ✅ Vente ajoutée: ${vente.total} CFA (client local #${localClientId})`);
         } catch (error) {
           console.error(`  ❌ Erreur vente:`, error);
         }
       }
       
-      // Paiements
-      for (const paiement of localData.paiements) {
-        try {
-          await db.addPaiement(paiement);
-          insertedCount++;
-          console.log(`  ✅ Paiement ajouté: ${paiement.montant} CFA`);
-        } catch (error) {
-          console.error(`  ❌ Erreur paiement:`, error);
-        }
-      }
+      // Paiements (temporairement ignorés car nécessitent un mapping vente UUID → ID local)
+      // TODO: Implémenter le mapping des ventes comme pour les clients
+      console.log(`  ⏭️ ${serverData.paiements?.length || 0} paiements ignorés (mapping non implémenté)`);
+      
       
       // Objectifs
       for (const objectif of localData.objectifs) {
@@ -437,16 +519,9 @@ class SyncService {
         }
       }
       
-      // Rappels
-      for (const rappel of localData.rappels) {
-        try {
-          await db.addRappel(rappel);
-          insertedCount++;
-          console.log(`  ✅ Rappel ajouté`);
-        } catch (error) {
-          console.error(`  ❌ Erreur rappel:`, error);
-        }
-      }
+      // Rappels (temporairement ignorés car nécessitent un mapping client/vente UUID → ID local)
+      // TODO: Implémenter le mapping des rappels comme pour les clients
+      console.log(`  ⏭️ ${serverData.rappels?.length || 0} rappels ignorés (mapping non implémenté)`);
       
       console.log(`✅ Merge terminé: ${insertedCount} nouveaux, ${updatedCount} mis à jour`);
       

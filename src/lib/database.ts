@@ -92,7 +92,7 @@ export interface Rappel {
 }
 
 export class KameDaayDatabase {
-  private db: SQLite.SQLiteDatabase;
+  public db: SQLite.SQLiteDatabase; // Changé de private à public
   private static instance: KameDaayDatabase | null = null;
 
   private constructor(database: SQLite.SQLiteDatabase) {
@@ -110,6 +110,8 @@ export class KameDaayDatabase {
   }
 
   private async initDatabase() {
+    console.log('📚 Initialisation de la base de données SQLite...');
+    
     // Table Clients
     await this.db.execAsync(`
       CREATE TABLE IF NOT EXISTS clients (
@@ -216,6 +218,18 @@ export class KameDaayDatabase {
         dateCreation INTEGER NOT NULL
       );
     `);
+
+    // Table de mapping UUID ↔ ID local (pour la synchronisation)
+    await this.db.execAsync(`
+      CREATE TABLE IF NOT EXISTS uuid_mappings (
+        uuid TEXT PRIMARY KEY,
+        localId INTEGER NOT NULL,
+        entityType TEXT NOT NULL,
+        UNIQUE(localId, entityType)
+      );
+    `);
+    
+    console.log('✅ Base de données SQLite initialisée');
   }
 
   // === CLIENTS ===
@@ -263,6 +277,98 @@ export class KameDaayDatabase {
     return result.length > 0 ? result[0] : null;
   }
 
+  // === UUID MAPPINGS ===
+  async saveUuidMapping(uuid: string, localId: number, entityType: 'client' | 'vente' | 'paiement' | 'produit' | 'template' | 'objectif' | 'depense' | 'rappel'): Promise<void> {
+    await this.db.runAsync(
+      'INSERT OR REPLACE INTO uuid_mappings (uuid, localId, entityType) VALUES (?, ?, ?)',
+      [uuid, localId, entityType]
+    );
+  }
+
+  async getLocalIdFromUuid(uuid: string, entityType: string): Promise<number | null> {
+    const result = await this.db.getAllAsync<{localId: number}>(
+      'SELECT localId FROM uuid_mappings WHERE uuid = ? AND entityType = ? LIMIT 1',
+      [uuid, entityType]
+    );
+    return result.length > 0 ? result[0].localId : null;
+  }
+
+  async getUuidFromLocalId(localId: number, entityType: string): Promise<string | null> {
+    const result = await this.db.getAllAsync<{uuid: string}>(
+      'SELECT uuid FROM uuid_mappings WHERE localId = ? AND entityType = ? LIMIT 1',
+      [localId, entityType]
+    );
+    return result.length > 0 ? result[0].uuid : null;
+  }
+
+  // === MIGRATION & CLEANUP ===
+  async cleanupCorruptedVentes(): Promise<void> {
+    console.log('🧹 Nettoyage des ventes corrompues...');
+    
+    // Supprimer toutes les ventes dont le clientId n'est pas un nombre
+    const allVentes = await this.db.getAllAsync<any>('SELECT * FROM ventes');
+    
+    let cleaned = 0;
+    for (const vente of allVentes) {
+      if (typeof vente.clientId !== 'number') {
+        console.log(`  ❌ Suppression vente ${vente.id} avec clientId invalide: ${vente.clientId}`);
+        await this.db.runAsync('DELETE FROM ventes WHERE id = ?', [vente.id]);
+        cleaned++;
+      }
+    }
+    
+    console.log(`✅ ${cleaned} ventes corrompues supprimées`);
+  }
+
+  // === UUID MAPPINGS (pour synchronisation) ===
+  async saveUuidMapping(uuid: string, localId: number, entityType: string): Promise<void> {
+    try {
+      await this.db.runAsync(
+        'INSERT OR REPLACE INTO uuid_mappings (uuid, localId, entityType) VALUES (?, ?, ?)',
+        [uuid, localId, entityType]
+      );
+    } catch (error) {
+      console.error('❌ Erreur saveUuidMapping:', error);
+      throw error;
+    }
+  }
+
+  async getUuidMapping(localId: number, entityType: string): Promise<string | null> {
+    try {
+      const result = await this.db.getAllAsync<{ uuid: string }>(
+        'SELECT uuid FROM uuid_mappings WHERE localId = ? AND entityType = ? LIMIT 1',
+        [localId, entityType]
+      );
+      return result.length > 0 ? result[0].uuid : null;
+    } catch (error) {
+      console.error('❌ Erreur getUuidMapping:', error);
+      return null;
+    }
+  }
+
+  async getLocalIdFromUuid(uuid: string, entityType: string): Promise<number | null> {
+    try {
+      const result = await this.db.getAllAsync<{ localId: number }>(
+        'SELECT localId FROM uuid_mappings WHERE uuid = ? AND entityType = ? LIMIT 1',
+        [uuid, entityType]
+      );
+      return result.length > 0 ? result[0].localId : null;
+    } catch (error) {
+      console.error('❌ Erreur getLocalIdFromUuid:', error);
+      return null;
+    }
+  }
+
+  async clearUuidMappings(): Promise<void> {
+    try {
+      await this.db.runAsync('DELETE FROM uuid_mappings');
+      console.log('✅ Tous les mappings UUID supprimés');
+    } catch (error) {
+      console.error('❌ Erreur clearUuidMappings:', error);
+      throw error;
+    }
+  }
+
   // === VENTES ===
   async addVente(vente: Vente): Promise<number> {
     const result = await this.db.runAsync(
@@ -274,10 +380,33 @@ export class KameDaayDatabase {
 
   async getAllVentes(): Promise<Vente[]> {
     const rows = await this.db.getAllAsync<any>('SELECT * FROM ventes ORDER BY date DESC');
-    return rows.map(row => ({
-      ...row,
-      articles: JSON.parse(row.articles)
-    }));
+    
+    // Log pour déboguer les ventes
+    if (rows.length > 0) {
+      console.log('🔍 Première vente brute de SQLite:', {
+        id: rows[0].id,
+        clientId: rows[0].clientId,
+        typeId: typeof rows[0].id,
+        typeClientId: typeof rows[0].clientId,
+        allKeys: Object.keys(rows[0])
+      });
+    }
+    
+    return rows.map((row, index) => {
+      // Vérifier si clientId est valide
+      if (!row.clientId || typeof row.clientId !== 'number') {
+        console.error(`❌ Vente ${index} (id=${row.id}) a un clientId invalide:`, {
+          clientId: row.clientId,
+          typeClientId: typeof row.clientId,
+          row
+        });
+      }
+      
+      return {
+        ...row,
+        articles: JSON.parse(row.articles)
+      };
+    });
   }
 
   async updateVente(id: number, vente: Partial<Vente>): Promise<void> {

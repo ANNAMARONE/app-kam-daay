@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '../lib/store';
 import { Card, CardContent } from './ui/Card';
 import { Button } from './ui/Button';
@@ -23,10 +24,25 @@ const CATEGORIES = [
   'Autre'
 ];
 
+const CATEGORY_ICONS: { [key: string]: string } = {
+  'Achat de Marchandises': 'cart',
+  'Transport': 'car',
+  'Loyer': 'home',
+  'Électricité': 'flash',
+  'Eau': 'water',
+  'Téléphone/Internet': 'call',
+  'Salaires': 'people',
+  'Marketing': 'megaphone',
+  'Fournitures': 'archive',
+  'Autre': 'ellipsis-horizontal'
+};
+
 export default function DepensesPage() {
+  const insets = useSafeAreaInsets();
   const { depenses, ventes, addDepense, deleteDepense } = useStore();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
+  const [expandedDepense, setExpandedDepense] = useState<number | null>(null);
   
   // Form state
   const [categorie, setCategorie] = useState('');
@@ -68,14 +84,14 @@ export default function DepensesPage() {
         date: new Date(date).getTime()
       });
 
-      alert('Dépense enregistrée');
+      alert('✅ Dépense enregistrée avec succès');
       setIsFormOpen(false);
       setCategorie('');
       setMontant('');
       setDescription('');
       setDate(new Date().toISOString().split('T')[0]);
     } catch (error) {
-      alert('Erreur lors de l\'enregistrement');
+      alert('❌ Erreur lors de l\'enregistrement');
     }
   };
 
@@ -83,187 +99,158 @@ export default function DepensesPage() {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?')) {
       try {
         await deleteDepense(id);
-        alert('Dépense supprimée');
+        alert('✅ Dépense supprimée');
       } catch (error) {
-        alert('Erreur lors de la suppression');
+        alert('❌ Erreur lors de la suppression');
       }
     }
   };
 
-  if (isFormOpen) {
-    return (
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerBgEffect} />
-          <View style={styles.headerContent}>
-            <View style={styles.headerIcon}>
-              <Ionicons name="trending-down" size={24} color={Colors.secondary} />
-            </View>
-            <Text style={styles.headerTitle}>Nouvelle Dépense</Text>
-          </View>
-        </View>
-
-        <ScrollView style={styles.scrollContent} contentContainerStyle={styles.formContainer}>
-          <Card style={styles.formCard}>
-            <CardContent style={styles.formContent}>
-              <Select
-                label="Catégorie *"
-                value={categorie}
-                onChange={setCategorie}
-                options={CATEGORIES.map(cat => ({ label: cat, value: cat }))}
-                placeholder="Sélectionner une catégorie"
-              />
-
-              <View style={styles.inputWithButton}>
-                <Input
-                  label="Montant (FCFA) *"
-                  placeholder="0"
-                  value={montant}
-                  onChangeText={setMontant}
-                  keyboardType="numeric"
-                  containerStyle={styles.flexInput}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowCalculator(true)}
-                  style={styles.calcButton}
-                >
-                  <Ionicons name="calculator" size={20} color={Colors.primary} />
-                </TouchableOpacity>
-              </View>
-
-              <Input
-                label="Date *"
-                placeholder="Date"
-                value={date}
-                onChangeText={setDate}
-              />
-
-              <Input
-                label="Description *"
-                placeholder="Décrivez la dépense..."
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={3}
-              />
-
-              <View style={styles.formActions}>
-                <Button
-                  title="Annuler"
-                  onPress={() => setIsFormOpen(false)}
-                  variant="outline"
-                  style={styles.formButton}
-                />
-                <Button
-                  title="Enregistrer"
-                  onPress={handleSubmit}
-                  variant="primary"
-                  style={styles.formButton}
-                />
-              </View>
-            </CardContent>
-          </Card>
-        </ScrollView>
-
-        <Calculatrice
-          visible={showCalculator}
-          onClose={() => setShowCalculator(false)}
-          onUseValue={(value) => setMontant(value.toString())}
-        />
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header avec Safe Area */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerBgEffect} />
+        <View style={styles.headerBgEffect2} />
         <View style={styles.headerContent}>
-          <View style={styles.headerIcon}>
-            <Ionicons name="trending-down" size={24} color={Colors.secondary} />
+          <View style={styles.headerTop}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="trending-down" size={28} color={Colors.white} />
+            </View>
+            <Text style={styles.headerTitle}>Dépenses</Text>
           </View>
-          <Text style={styles.headerTitle}>Mes Dépenses</Text>
+          <Text style={styles.headerSubtitle}>Suivez vos dépenses et bénéfices</Text>
         </View>
       </View>
 
-      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.contentContainer}>
-        {/* KPI Bénéfice */}
-        <Card style={StyleSheet.flatten([styles.kpiCard, benefice >= 0 ? styles.kpiCardPositive : styles.kpiCardNegative])}>
-          <CardContent style={styles.kpiContent}>
-            <View style={styles.kpiInfo}>
-              <Text style={styles.kpiLabel}>Bénéfice Net</Text>
-              <Text style={[styles.kpiValue, benefice < 0 && styles.kpiValueNegative]}>
-                {formatCurrency(benefice)}
-              </Text>
-              <Text style={styles.kpiSubtitle}>Revenus - Dépenses</Text>
-            </View>
-            <View style={styles.kpiIcon}>
-              <Text style={styles.kpiEmoji}>💰</Text>
-            </View>
-          </CardContent>
-        </Card>
-
-        {/* KPIs Revenus/Dépenses */}
-        <View style={styles.kpisRow}>
-          <Card style={styles.miniKpiCard}>
-            <CardContent style={styles.miniKpiContent}>
-              <Text style={styles.miniKpiLabel}>Total Revenus</Text>
-              <Text style={[styles.miniKpiValue, { color: Colors.accent }]}>
-                {formatCurrency(totalRevenu)}
-              </Text>
+      <ScrollView 
+        style={styles.scrollContent} 
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + 100 }
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Statistiques en Haut */}
+        <View style={styles.statsContainer}>
+          {/* Bénéfice Net - Card principale */}
+          <Card style={[styles.beneficeCard, benefice >= 0 ? styles.beneficeCardPositive : styles.beneficeCardNegative]}>
+            <CardContent style={styles.beneficeContent}>
+              <View style={styles.beneficeLeft}>
+                <View style={[styles.beneficeIconLarge, benefice >= 0 ? styles.beneficeIconPositive : styles.beneficeIconNegative]}>
+                  <Ionicons 
+                    name={benefice >= 0 ? "trending-up" : "trending-down"} 
+                    size={36} 
+                    color={Colors.white} 
+                  />
+                </View>
+                <View style={styles.beneficeInfo}>
+                  <Text style={styles.beneficeLabel}>Bénéfice Net</Text>
+                  <Text style={[styles.beneficeValue, benefice < 0 && styles.beneficeValueNegative]}>
+                    {formatCurrency(benefice)}
+                  </Text>
+                  <Text style={styles.beneficeSubtitle}>Revenus - Dépenses</Text>
+                </View>
+              </View>
             </CardContent>
           </Card>
 
-          <Card style={styles.miniKpiCard}>
-            <CardContent style={styles.miniKpiContent}>
-              <Text style={styles.miniKpiLabel}>Total Dépenses</Text>
-              <Text style={[styles.miniKpiValue, { color: Colors.error }]}>
-                {formatCurrency(totalDepenses)}
-              </Text>
-            </CardContent>
-          </Card>
+          {/* Stats Row */}
+          <View style={styles.statsRow}>
+            <Card style={styles.statCard}>
+              <CardContent style={styles.statContent}>
+                <View style={[styles.statIcon, { backgroundColor: '#E8F5E9' }]}>
+                  <Ionicons name="cash-outline" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.statValue}>{formatCurrency(totalRevenu)}</Text>
+                <Text style={styles.statLabel}>Revenus</Text>
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statCard}>
+              <CardContent style={styles.statContent}>
+                <View style={[styles.statIcon, { backgroundColor: '#FFEBEE' }]}>
+                  <Ionicons name="wallet-outline" size={20} color="#F44336" />
+                </View>
+                <Text style={styles.statValue}>{formatCurrency(totalDepenses)}</Text>
+                <Text style={styles.statLabel}>Dépenses</Text>
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statCard}>
+              <CardContent style={styles.statContent}>
+                <View style={[styles.statIcon, { backgroundColor: '#FFF3E0' }]}>
+                  <Ionicons name="list-outline" size={20} color="#FF9800" />
+                </View>
+                <Text style={styles.statValue}>{depenses.length}</Text>
+                <Text style={styles.statLabel}>Total</Text>
+              </CardContent>
+            </Card>
+          </View>
         </View>
 
-        {/* Dépenses par Catégorie */}
+        {/* Top Catégories */}
         {Object.keys(depensesParCategorie).length > 0 && (
-          <Card style={styles.categoryCard}>
-            <CardContent style={styles.categoryContent}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="pricetag" size={20} color={Colors.secondary} />
-                <Text style={styles.sectionTitle}>Par Catégorie</Text>
-              </View>
-              {Object.entries(depensesParCategorie)
-                .sort(([, a]: any, [, b]: any) => b - a)
-                .slice(0, 5)
-                .map(([cat, montant]: any, index) => (
-                  <View key={index} style={styles.categoryItem}>
-                    <Text style={styles.categoryName}>{cat}</Text>
-                    <Text style={styles.categoryValue}>{formatCurrency(montant)}</Text>
-                  </View>
-                ))}
-            </CardContent>
-          </Card>
+          <View style={styles.categoriesSection}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="pie-chart" size={20} color={Colors.secondary} />
+              <Text style={styles.sectionTitle}>Top Catégories</Text>
+            </View>
+            
+            {Object.entries(depensesParCategorie)
+              .sort(([, a]: any, [, b]: any) => b - a)
+              .slice(0, 5)
+              .map(([cat, montant]: any, index) => {
+                const percentage = (montant / totalDepenses) * 100;
+                return (
+                  <Card key={index} style={styles.categoryCard}>
+                    <CardContent style={styles.categoryContent}>
+                      <View style={styles.categoryLeft}>
+                        <View style={styles.categoryIconBox}>
+                          <Ionicons 
+                            name={CATEGORY_ICONS[cat] as any || 'ellipsis-horizontal'} 
+                            size={22} 
+                            color={Colors.error} 
+                          />
+                        </View>
+                        <View style={styles.categoryInfo}>
+                          <Text style={styles.categoryName}>{cat}</Text>
+                          <View style={styles.categoryProgressBar}>
+                            <View style={[styles.categoryProgressFill, { width: `${percentage}%` }]} />
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.categoryRight}>
+                        <Text style={styles.categoryValue}>{formatCurrency(montant)}</Text>
+                        <Text style={styles.categoryPercentage}>{percentage.toFixed(0)}%</Text>
+                      </View>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+          </View>
         )}
 
         {/* Bouton Ajouter */}
-        <View style={styles.addButtonContainer}>
-          <Button
-            title="Ajouter une Dépense"
-            onPress={() => setIsFormOpen(true)}
-            variant="primary"
-            fullWidth
-            icon={<Ionicons name="add" size={20} color={Colors.white} />}
-          />
-        </View>
+        <TouchableOpacity 
+          style={styles.addButton}
+          onPress={() => setIsFormOpen(true)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.addButtonContent}>
+            <View style={styles.addButtonIcon}>
+              <Ionicons name="add" size={24} color={Colors.white} />
+            </View>
+            <Text style={styles.addButtonText}>Ajouter une Dépense</Text>
+          </View>
+        </TouchableOpacity>
 
         {/* Liste des Dépenses */}
         {depenses.length === 0 ? (
           <Card style={styles.emptyCard}>
             <CardContent style={styles.emptyContent}>
               <View style={styles.emptyIcon}>
-                <Ionicons name="trending-down" size={48} color={Colors.grayDark} />
+                <Ionicons name="receipt-outline" size={56} color={Colors.textSecondary} />
               </View>
               <Text style={styles.emptyTitle}>Aucune dépense</Text>
               <Text style={styles.emptySubtitle}>
@@ -272,40 +259,181 @@ export default function DepensesPage() {
             </CardContent>
           </Card>
         ) : (
-          <View style={styles.listContainer}>
-            <Text style={styles.listTitle}>Historique</Text>
+          <View style={styles.listSection}>
+            <View style={styles.listHeader}>
+              <Ionicons name="time-outline" size={20} color={Colors.secondary} />
+              <Text style={styles.listTitle}>Historique</Text>
+              <View style={styles.listBadge}>
+                <Text style={styles.listBadgeText}>{depenses.length}</Text>
+              </View>
+            </View>
+
             {[...depenses]
               .sort((a, b) => b.date - a.date)
               .map((depense) => (
                 <Card key={depense.id} style={styles.depenseCard}>
                   <CardContent style={styles.depenseContent}>
-                    <View style={styles.depenseHeader}>
-                      <View style={styles.depenseInfo}>
-                        <View style={styles.depenseTags}>
-                          <View style={styles.categoryTag}>
-                            <Text style={styles.categoryTagText}>{depense.categorie}</Text>
+                    <TouchableOpacity
+                      onPress={() => setExpandedDepense(expandedDepense === depense.id ? null : depense.id!)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.depenseHeader}>
+                        <View style={styles.depenseLeft}>
+                          <View style={styles.depenseIconBox}>
+                            <Ionicons 
+                              name={CATEGORY_ICONS[depense.categorie] as any || 'ellipsis-horizontal'} 
+                              size={24} 
+                              color={Colors.error} 
+                            />
                           </View>
-                          <View style={styles.dateTag}>
-                            <Ionicons name="calendar" size={12} color={Colors.textSecondary} />
-                            <Text style={styles.dateTagText}>{formatDate(depense.date)}</Text>
+                          <View style={styles.depenseInfo}>
+                            <View style={styles.depenseTags}>
+                              <View style={styles.categoryTag}>
+                                <Text style={styles.categoryTagText}>{depense.categorie}</Text>
+                              </View>
+                            </View>
+                            <Text style={styles.depenseDescription} numberOfLines={expandedDepense === depense.id ? undefined : 1}>
+                              {depense.description}
+                            </Text>
                           </View>
                         </View>
-                        <Text style={styles.depenseDescription}>{depense.description}</Text>
-                        <Text style={styles.depenseMontant}>{formatCurrency(depense.montant)}</Text>
+                        <View style={styles.depenseRight}>
+                          <Text style={styles.depenseMontant}>{formatCurrency(depense.montant)}</Text>
+                          <View style={styles.depenseDate}>
+                            <Ionicons name="calendar-outline" size={12} color={Colors.textSecondary} />
+                            <Text style={styles.depenseDateText}>{formatDate(depense.date)}</Text>
+                          </View>
+                        </View>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => handleDelete(depense.id!)}
-                        style={styles.deleteButton}
-                      >
-                        <Ionicons name="trash" size={20} color={Colors.error} />
-                      </TouchableOpacity>
-                    </View>
+
+                      {expandedDepense === depense.id && (
+                        <View style={styles.depenseDetails}>
+                          <View style={styles.depenseDetailRow}>
+                            <View style={styles.depenseDetailItem}>
+                              <Ionicons name="calendar" size={16} color={Colors.textSecondary} />
+                              <Text style={styles.depenseDetailLabel}>Date</Text>
+                              <Text style={styles.depenseDetailValue}>{formatDate(depense.date)}</Text>
+                            </View>
+                            <View style={styles.depenseDetailItem}>
+                              <Ionicons name="pricetag" size={16} color={Colors.textSecondary} />
+                              <Text style={styles.depenseDetailLabel}>Catégorie</Text>
+                              <Text style={styles.depenseDetailValue}>{depense.categorie}</Text>
+                            </View>
+                          </View>
+
+                          <TouchableOpacity
+                            onPress={() => handleDelete(depense.id!)}
+                            style={styles.deleteButton}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="trash-outline" size={18} color={Colors.white} />
+                            <Text style={styles.deleteButtonText}>Supprimer</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </TouchableOpacity>
                   </CardContent>
                 </Card>
               ))}
           </View>
         )}
       </ScrollView>
+
+      {/* Modal Formulaire */}
+      <Modal
+        visible={isFormOpen}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setIsFormOpen(false)}
+      >
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderLeft}>
+              <TouchableOpacity onPress={() => setIsFormOpen(false)} style={styles.modalCloseButton}>
+                <Ionicons name="close" size={24} color={Colors.secondary} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Nouvelle Dépense</Text>
+            </View>
+          </View>
+
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalContent}
+          >
+            <ScrollView 
+              style={styles.modalScroll}
+              contentContainerStyle={[styles.modalScrollContent, { paddingBottom: insets.bottom + 20 }]}
+              showsVerticalScrollIndicator={false}
+            >
+              <Card style={styles.formCard}>
+                <CardContent style={styles.formContent}>
+                  <Select
+                    label="Catégorie *"
+                    value={categorie}
+                    onChange={setCategorie}
+                    options={CATEGORIES.map(cat => ({ label: cat, value: cat }))}
+                    placeholder="Sélectionner une catégorie"
+                  />
+
+                  <View style={styles.inputWithButton}>
+                    <Input
+                      label="Montant (FCFA) *"
+                      placeholder="0"
+                      value={montant}
+                      onChangeText={setMontant}
+                      keyboardType="numeric"
+                      containerStyle={styles.flexInput}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowCalculator(true)}
+                      style={styles.calcButton}
+                    >
+                      <Ionicons name="calculator" size={20} color={Colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <Input
+                    label="Date *"
+                    placeholder="YYYY-MM-DD"
+                    value={date}
+                    onChangeText={setDate}
+                  />
+
+                  <Input
+                    label="Description *"
+                    placeholder="Décrivez la dépense..."
+                    value={description}
+                    onChangeText={setDescription}
+                    multiline
+                    numberOfLines={3}
+                  />
+
+                  <View style={styles.formActions}>
+                    <Button
+                      title="Annuler"
+                      onPress={() => setIsFormOpen(false)}
+                      variant="outline"
+                      style={styles.formButton}
+                    />
+                    <Button
+                      title="Enregistrer"
+                      onPress={handleSubmit}
+                      variant="primary"
+                      style={styles.formButton}
+                    />
+                  </View>
+                </CardContent>
+              </Card>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Calculatrice
+        visible={showCalculator}
+        onClose={() => setShowCalculator(false)}
+        onUseValue={(value) => setMontant(value.toString())}
+      />
     </View>
   );
 }
@@ -313,60 +441,531 @@ export default function DepensesPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: '#F5F7FA',
   },
+  
+  // ===== HEADER =====
   header: {
     backgroundColor: Colors.secondary,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 40,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     position: 'relative',
     overflow: 'hidden',
   },
   headerBgEffect: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 160,
-    height: 160,
+    top: -40,
+    right: -40,
+    width: 180,
+    height: 180,
     backgroundColor: Colors.primary,
-    borderRadius: 80,
-    opacity: 0.1,
+    borderRadius: 90,
+    opacity: 0.15,
+  },
+  headerBgEffect2: {
+    position: 'absolute',
+    bottom: -60,
+    left: -60,
+    width: 200,
+    height: 200,
+    backgroundColor: Colors.primary,
+    borderRadius: 100,
+    opacity: 0.08,
   },
   headerContent: {
+    gap: 8,
+  },
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   headerIcon: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     backgroundColor: Colors.primary,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: Colors.white,
   },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginLeft: 64,
+  },
+
+  // ===== CONTENT =====
   scrollContent: {
     flex: 1,
   },
   contentContainer: {
     padding: 16,
-    paddingTop: 8,
-    paddingBottom: 100,
+    gap: 16,
   },
-  formContainer: {
+
+  // ===== STATS =====
+  statsContainer: {
+    gap: 12,
+  },
+  beneficeCard: {
+    borderWidth: 0,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  beneficeCardPositive: {
+    backgroundColor: '#E8F5E9',
+  },
+  beneficeCardNegative: {
+    backgroundColor: '#FFEBEE',
+  },
+  beneficeContent: {
+    padding: 20,
+  },
+  beneficeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  beneficeIconLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  beneficeIconPositive: {
+    backgroundColor: Colors.accent,
+  },
+  beneficeIconNegative: {
+    backgroundColor: Colors.error,
+  },
+  beneficeInfo: {
+    flex: 1,
+  },
+  beneficeLabel: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  beneficeValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.accent,
+    marginBottom: 4,
+  },
+  beneficeValueNegative: {
+    color: Colors.error,
+  },
+  beneficeSubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    borderWidth: 0,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  statContent: {
     padding: 16,
-    paddingBottom: 100,
+    alignItems: 'center',
+    gap: 8,
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.secondary,
+    textAlign: 'center',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+
+  // ===== CATEGORIES =====
+  categoriesSection: {
+    gap: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.secondary,
+  },
+  categoryCard: {
+    backgroundColor: Colors.white,
+    borderWidth: 0,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  categoryContent: {
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  categoryIconBox: {
+    width: 44,
+    height: 44,
+    backgroundColor: Colors.error + '15',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryInfo: {
+    flex: 1,
+  },
+  categoryName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.secondary,
+    marginBottom: 6,
+  },
+  categoryProgressBar: {
+    height: 6,
+    backgroundColor: Colors.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  categoryProgressFill: {
+    height: '100%',
+    backgroundColor: Colors.error,
+    borderRadius: 3,
+  },
+  categoryRight: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  categoryValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.secondary,
+    marginBottom: 2,
+  },
+  categoryPercentage: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+
+  // ===== ADD BUTTON =====
+  addButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  addButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  addButtonIcon: {
+    width: 32,
+    height: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+
+  // ===== LIST =====
+  listSection: {
+    gap: 12,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  listTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.secondary,
+    flex: 1,
+  },
+  listBadge: {
+    backgroundColor: Colors.primary + '20',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  listBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+
+  // Empty State
+  emptyCard: {
+    backgroundColor: Colors.white,
+    borderWidth: 0,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    marginTop: 20,
+  },
+  emptyContent: {
+    padding: 48,
+    alignItems: 'center',
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    backgroundColor: Colors.gray + '30',
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.secondary,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // ===== DEPENSE CARD =====
+  depenseCard: {
+    backgroundColor: Colors.white,
+    borderWidth: 0,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  depenseContent: {
+    padding: 16,
+  },
+  depenseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  depenseLeft: {
+    flexDirection: 'row',
+    gap: 12,
+    flex: 1,
+  },
+  depenseIconBox: {
+    width: 48,
+    height: 48,
+    backgroundColor: Colors.error + '15',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  depenseInfo: {
+    flex: 1,
+  },
+  depenseTags: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 6,
+  },
+  categoryTag: {
+    backgroundColor: Colors.error + '20',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  categoryTagText: {
+    fontSize: 11,
+    color: Colors.error,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  depenseDescription: {
+    fontSize: 14,
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  depenseRight: {
+    alignItems: 'flex-end',
+    marginLeft: 12,
+  },
+  depenseMontant: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.error,
+    marginBottom: 4,
+  },
+  depenseDate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  depenseDateText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+
+  // Details
+  depenseDetails: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 12,
+  },
+  depenseDetailRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  depenseDetailItem: {
+    flex: 1,
+    backgroundColor: Colors.gray + '20',
+    padding: 12,
+    borderRadius: 12,
+    gap: 4,
+  },
+  depenseDetailLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  depenseDetailValue: {
+    fontSize: 13,
+    color: Colors.secondary,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.error,
+    padding: 12,
+    borderRadius: 12,
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+
+  // ===== MODAL =====
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
+  },
+  modalHeader: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.gray + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.secondary,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    padding: 16,
   },
   formCard: {
-    marginTop: 8,
+    backgroundColor: Colors.white,
+    borderWidth: 0,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   formContent: {
     padding: 20,
@@ -396,199 +995,5 @@ const styles = StyleSheet.create({
   },
   formButton: {
     flex: 1,
-  },
-  kpiCard: {
-    marginBottom: 16,
-  },
-  kpiCardPositive: {
-    backgroundColor: '#E8F5E9',
-    borderWidth: 2,
-    borderColor: Colors.accent,
-  },
-  kpiCardNegative: {
-    backgroundColor: '#FFEBEE',
-    borderWidth: 2,
-    borderColor: Colors.error,
-  },
-  kpiContent: {
-    padding: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  kpiInfo: {
-    flex: 1,
-  },
-  kpiLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  kpiValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.accent,
-    marginBottom: 4,
-  },
-  kpiValueNegative: {
-    color: Colors.error,
-  },
-  kpiSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  kpiIcon: {
-    width: 64,
-    height: 64,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  kpiEmoji: {
-    fontSize: 32,
-  },
-  kpisRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  miniKpiCard: {
-    flex: 1,
-  },
-  miniKpiContent: {
-    padding: 16,
-  },
-  miniKpiLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 4,
-  },
-  miniKpiValue: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  categoryCard: {
-    marginBottom: 16,
-  },
-  categoryContent: {
-    padding: 16,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.secondary,
-  },
-  categoryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  categoryName: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  categoryValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  addButtonContainer: {
-    marginBottom: 16,
-  },
-  listContainer: {
-    gap: 12,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.secondary,
-    marginBottom: 8,
-  },
-  emptyCard: {
-    marginTop: 40,
-  },
-  emptyContent: {
-    padding: 48,
-    alignItems: 'center',
-  },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    backgroundColor: Colors.gray,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-  },
-  depenseCard: {
-    marginBottom: 12,
-  },
-  depenseContent: {
-    padding: 16,
-  },
-  depenseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  depenseInfo: {
-    flex: 1,
-  },
-  depenseTags: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  categoryTag: {
-    backgroundColor: Colors.error + '20',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  categoryTagText: {
-    fontSize: 12,
-    color: Colors.error,
-    fontWeight: '600',
-  },
-  dateTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  dateTagText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  depenseDescription: {
-    fontSize: 14,
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  depenseMontant: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.error,
-  },
-  deleteButton: {
-    padding: 8,
   },
 });

@@ -1,6 +1,8 @@
+
+
 import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
@@ -251,25 +253,31 @@ export default function VentesPage() {
   const total = calculateTotal();
   const reste = statut === 'Crédit' ? total : total - (parseFloat(montantPaye) || 0);
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Header avec Safe Area et effets */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerBgEffect} />
+        <View style={styles.headerBgEffect2} />
         <View style={styles.headerContent}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="cart" size={28} color={Colors.white} />
+            </View>
+            <Text style={styles.headerTitle}>Nouvelle Vente</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>Enregistrer une transaction</Text>
+          
+          {/* Bouton retour en absolu */}
           <TouchableOpacity 
+            style={styles.backButtonHeader}
             onPress={() => navigation.goBack()}
-            style={styles.backButton}
+            activeOpacity={0.8}
           >
             <Ionicons name="arrow-back" size={24} color={Colors.white} />
           </TouchableOpacity>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Nouvelle Vente</Text>
-            <Text style={styles.headerSubtitle}>Enregistrer une transaction</Text>
-          </View>
-          <View style={styles.headerIcon}>
-            <Ionicons name="cart" size={24} color={Colors.secondary} />
-          </View>
         </View>
       </View>
 
@@ -391,7 +399,7 @@ export default function VentesPage() {
 
                   <View style={styles.halfInput}>
                     <Input
-                      label="Prix Unitaire (FCFA)"
+                      label="Prix Unitaire"
                       placeholder="0"
                       value={article.prixUnitaire.toString()}
                       onChangeText={(text) => updateArticle(index, 'prixUnitaire', parseFloat(text) || 0)}
@@ -735,9 +743,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingBottom: 32,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -745,45 +753,64 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -40,
     right: -40,
-    width: 160,
-    height: 160,
+    width: 180,
+    height: 180,
     backgroundColor: Colors.primary,
-    borderRadius: 80,
-    opacity: 0.1,
+    borderRadius: 90,
+    opacity: 0.15,
+  },
+  headerBgEffect2: {
+    position: 'absolute',
+    bottom: -60,
+    left: -60,
+    width: 200,
+    height: 200,
+    backgroundColor: Colors.primary,
+    borderRadius: 100,
+    opacity: 0.08,
   },
   headerContent: {
+    gap: 8,
+  },
+  backButtonHeader: {
+    position: 'absolute',
+    top: 8,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.white,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
-  },
   headerIcon: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     backgroundColor: Colors.primary,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginLeft: 64,
   },
   scrollContent: {
     flex: 1,

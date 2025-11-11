@@ -195,7 +195,7 @@ export default function Dashboard() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 50,
     paddingBottom: 40,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,

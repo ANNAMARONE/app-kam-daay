@@ -56,7 +56,7 @@ export default function HistoriqueVentes() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerBgEffect} />
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 50,
     paddingBottom: 24,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,

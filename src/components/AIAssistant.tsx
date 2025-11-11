@@ -14,7 +14,7 @@ import {
   Animated,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
@@ -36,6 +36,7 @@ type TabType = 'coach' | 'previsions' | 'vip' | 'insights' | 'risques' | 'relanc
 
 export default function AIAssistant() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>('coach');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -148,22 +149,21 @@ export default function AIAssistant() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <LinearGradient
-          colors={[Colors.secondary, Colors.primary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.white} />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Assistant IA</Text>
+      <View style={styles.container}>
+        {/* Header avec Safe Area et effets */}
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.headerBgEffect} />
+          <View style={styles.headerBgEffect2} />
+          <View style={styles.headerContent}>
+            <View style={styles.headerTop}>
+              <View style={styles.headerIcon}>
+                <Ionicons name="bulb" size={28} color={Colors.white} />
+              </View>
+              <Text style={styles.headerTitle}>Assistant IA</Text>
+            </View>
             <Text style={styles.headerSubtitle}>Analyse intelligente</Text>
           </View>
-          <View style={{ width: 40 }} />
-        </LinearGradient>
+        </View>
         <View style={styles.loadingContainer}>
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -171,30 +171,35 @@ export default function AIAssistant() {
             <Text style={styles.loadingSubtext}>Traitement des données</Text>
           </View>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header avec gradient */}
-      <LinearGradient
-        colors={[Colors.secondary, Colors.primary]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
-          <Ionicons name="arrow-back" size={24} color={Colors.white} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>🤖 Assistant IA</Text>
-          <Text style={styles.headerSubtitle}>Insights intelligents</Text>
+    <View style={styles.container}>
+      {/* Header avec Safe Area et effets */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerBgEffect} />
+        <View style={styles.headerBgEffect2} />
+        <View style={styles.headerContent}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="bulb" size={28} color={Colors.white} />
+            </View>
+            <Text style={styles.headerTitle}>🤖 Assistant IA</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>Insights intelligents • {vipScores.filter(v => v.tier === 'platine' || v.tier === 'or').length} clients VIP</Text>
+          
+          {/* Bouton refresh en absolu */}
+          <TouchableOpacity 
+            style={styles.refreshButtonHeader}
+            onPress={handleRefresh}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="refresh" size={24} color={Colors.white} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleRefresh} style={styles.headerButton}>
-          <Ionicons name="refresh" size={24} color={Colors.white} />
-        </TouchableOpacity>
-      </LinearGradient>
+      </View>
 
       {/* Tabs améliorés */}
       <View style={styles.tabsWrapper}>
@@ -664,7 +669,7 @@ export default function AIAssistant() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -674,39 +679,76 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F7FA',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    paddingBottom: 32,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  headerButton: {
+  headerBgEffect: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 180,
+    height: 180,
+    backgroundColor: Colors.primary,
+    borderRadius: 90,
+    opacity: 0.15,
+  },
+  headerBgEffect2: {
+    position: 'absolute',
+    bottom: -60,
+    left: -60,
+    width: 200,
+    height: 200,
+    backgroundColor: Colors.primary,
+    borderRadius: 100,
+    opacity: 0.08,
+  },
+  headerContent: {
+    gap: 8,
+  },
+  refreshButtonHeader: {
+    position: 'absolute',
+    top: 8,
+    right: 20,
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
-  headerCenter: {
-    flex: 1,
+  headerTop: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+  },
+  headerIcon: {
+    width: 52,
+    height: 52,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '700',
     color: Colors.white,
-    letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.85)',
-    marginTop: 2,
+    marginLeft: 64,
   },
   loadingContainer: {
     flex: 1,

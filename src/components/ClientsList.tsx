@@ -9,18 +9,20 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useStore } from '../lib/store';
 import { formatCurrency, formatPhone } from '../lib/utils';
 import Colors from '../constants/Colors';
+import { Card, CardContent } from './ui/Card';
 import ClientForm from './ClientForm';
 import ClientDetail from './ClientDetail';
 
 type Tab = 'tous' | 'actifs' | 'inactifs' | 'credit';
 
 export default function ClientsList() {
+  const insets = useSafeAreaInsets();
   const { clients, ventes, paiements } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('tous');
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,6 +67,20 @@ export default function ClientsList() {
     const dateB = b.derniereVisite || 0;
     return dateB - dateA;
   });
+
+  // Calculer les statistiques
+  const getStatistics = () => {
+    const totalClients = clients.length;
+    const clientsActifs = clients.filter(c => 
+      c.derniereVisite && (Date.now() - c.derniereVisite) < 30 * 24 * 60 * 60 * 1000
+    ).length;
+    const clientsAvecCredit = clients.filter(c => getClientCredit(c.id!) > 0).length;
+    const clientsFideles = clients.filter(c => c.type === 'Fidèle').length;
+
+    return { totalClients, clientsActifs, clientsAvecCredit, clientsFideles };
+  };
+
+  const stats = getStatistics();
 
   // Ouvrir le formulaire
   const openForm = (client?: any) => {
@@ -112,62 +128,143 @@ export default function ClientsList() {
     const isActive = item.derniereVisite && (Date.now() - item.derniereVisite) < 30 * 24 * 60 * 60 * 1000;
 
     return (
-      <TouchableOpacity
-        style={styles.clientCard}
-        onPress={() => openDetail(item)}
-        activeOpacity={0.7}
-      >
-        {/* Avatar et info */}
-        <View style={styles.clientHeader}>
-          <View style={[styles.avatar, hasCredit && styles.avatarCredit]}>
-            <Text style={styles.avatarText}>
-              {item.prenom.charAt(0).toUpperCase()}{item.nom.charAt(0).toUpperCase()}
-            </Text>
-            {item.type === 'Fidèle' && (
-              <View style={styles.starBadge}>
-                <Ionicons name="star" size={12} color={Colors.white} />
+      <Card style={styles.clientCard}>
+        <CardContent style={styles.clientCardContent}>
+          <TouchableOpacity
+            onPress={() => openDetail(item)}
+            activeOpacity={0.7}
+          >
+            {/* Header avec Avatar et Info */}
+            <View style={styles.clientHeader}>
+              <View style={styles.clientLeft}>
+                <View style={[styles.avatar, hasCredit && styles.avatarCredit]}>
+                  <Text style={styles.avatarText}>
+                    {item.prenom.charAt(0).toUpperCase()}{item.nom.charAt(0).toUpperCase()}
+                  </Text>
+                  {item.type === 'Fidèle' && (
+                    <View style={styles.starBadge}>
+                      <Ionicons name="star" size={12} color={Colors.white} />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.clientInfo}>
+                  <Text style={styles.clientName}>{item.prenom} {item.nom}</Text>
+                  <View style={styles.clientMeta}>
+                    <Ionicons name="call-outline" size={13} color={Colors.textSecondary} />
+                    <Text style={styles.clientPhone}>{formatPhone(item.telephone)}</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.clientRight}>
+                {isActive && (
+                  <View style={styles.activeBadge}>
+                    <View style={styles.activeDot} />
+                    <Text style={styles.activeBadgeText}>Actif</Text>
+                  </View>
+                )}
+                <Ionicons name="chevron-forward" size={20} color={Colors.grayDark} />
+              </View>
+            </View>
+
+            {/* Footer avec Crédit si présent */}
+            {hasCredit && (
+              <View style={styles.clientFooter}>
+                <View style={styles.creditInfo}>
+                  <Ionicons name="card-outline" size={16} color={Colors.warning} />
+                  <Text style={styles.creditLabel}>Crédit en cours</Text>
+                </View>
+                <Text style={styles.creditAmount}>{formatCurrency(credit)}</Text>
               </View>
             )}
-          </View>
-          <View style={styles.clientInfo}>
-            <Text style={styles.clientName}>{item.prenom} {item.nom}</Text>
-            <View style={styles.clientMeta}>
-              <Ionicons name="call" size={12} color={Colors.grayDark} />
-              <Text style={styles.clientPhone}>{formatPhone(item.telephone)}</Text>
-              {isActive && (
-                <View style={styles.activeBadge}>
-                  <Text style={styles.activeBadgeText}>Actif</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* Crédit si présent */}
-        {hasCredit && (
-          <View style={styles.clientFooter}>
-            <View style={styles.creditBadge}>
-              <Ionicons name="card" size={14} color={Colors.error} />
-              <Text style={styles.creditText}>{formatCurrency(credit)}</Text>
-            </View>
-          </View>
-        )}
-      </TouchableOpacity>
+          </TouchableOpacity>
+        </CardContent>
+      </Card>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View>
+    <View style={styles.container}>
+      {/* Header avec Safe Area et effets */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerBgEffect} />
+        <View style={styles.headerBgEffect2} />
+        <View style={styles.headerContent}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="people" size={28} color={Colors.white} />
+            </View>
             <Text style={styles.headerTitle}>Clients</Text>
-            <Text style={styles.headerSubtitle}>{sortedClients.length} clients</Text>
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={() => openForm()}>
+          <Text style={styles.headerSubtitle}>Gérez votre portefeuille client</Text>
+          
+          {/* Bouton d'ajout dans le header */}
+          <TouchableOpacity 
+            style={styles.addButtonHeader} 
+            onPress={() => openForm()}
+            activeOpacity={0.8}
+          >
             <Ionicons name="add" size={24} color={Colors.secondary} />
           </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView 
+        style={styles.scrollContent}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + 100 }
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Statistiques en Haut */}
+        <View style={styles.statsContainer}>
+          {/* Total Clients - Card principale */}
+          <Card style={styles.totalCard}>
+            <CardContent style={styles.totalContent}>
+              <View style={styles.totalLeft}>
+                <View style={styles.totalIconLarge}>
+                  <Ionicons name="people" size={36} color={Colors.white} />
+                </View>
+                <View style={styles.totalInfo}>
+                  <Text style={styles.totalLabel}>Total Clients</Text>
+                  <Text style={styles.totalValue}>{stats.totalClients}</Text>
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+
+          {/* Stats Row */}
+          <View style={styles.statsRow}>
+            <Card style={styles.statCard}>
+              <CardContent style={styles.statContent}>
+                <View style={[styles.statIcon, { backgroundColor: '#E8F5E9' }]}>
+                  <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.statValue}>{stats.clientsActifs}</Text>
+                <Text style={styles.statLabel}>Actifs</Text>
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statCard}>
+              <CardContent style={styles.statContent}>
+                <View style={[styles.statIcon, { backgroundColor: '#FFF3E0' }]}>
+                  <Ionicons name="card-outline" size={20} color="#FF9800" />
+                </View>
+                <Text style={styles.statValue}>{stats.clientsAvecCredit}</Text>
+                <Text style={styles.statLabel}>Avec crédit</Text>
+              </CardContent>
+            </Card>
+
+            <Card style={styles.statCard}>
+              <CardContent style={styles.statContent}>
+                <View style={[styles.statIcon, { backgroundColor: '#FFF9C4' }]}>
+                  <Ionicons name="star" size={20} color={Colors.primary} />
+                </View>
+                <Text style={styles.statValue}>{stats.clientsFideles}</Text>
+                <Text style={styles.statLabel}>Fidèles</Text>
+              </CardContent>
+            </Card>
+          </View>
         </View>
 
         {/* Barre de recherche */}
@@ -210,31 +307,53 @@ export default function ClientsList() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      </View>
 
-      {/* Liste des clients */}
-      <FlatList
-        data={sortedClients}
-        renderItem={renderClient}
-        keyExtractor={(item) => item.id!.toString()}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={64} color={Colors.grayLight} />
-            <Text style={styles.emptyText}>Aucun client trouvé</Text>
-            <Text style={styles.emptySubtext}>
-              {searchQuery ? 'Essayez une autre recherche' : 'Ajoutez votre premier client'}
+        {/* Liste des clients */}
+        <View style={styles.listSection}>
+          <View style={styles.listHeader}>
+            <Ionicons name="list" size={22} color={Colors.secondary} />
+            <Text style={styles.listTitle}>
+              {activeTab === 'tous' ? 'Tous les Clients' : 
+               activeTab === 'actifs' ? 'Clients Actifs' :
+               activeTab === 'inactifs' ? 'Clients Inactifs' : 
+               'Clients avec Crédit'}
             </Text>
-            {!searchQuery && (
-              <TouchableOpacity style={styles.emptyButton} onPress={() => openForm()}>
-                <Ionicons name="add-circle" size={20} color={Colors.white} />
-                <Text style={styles.emptyButtonText}>Ajouter un client</Text>
-              </TouchableOpacity>
-            )}
+            <Text style={styles.listCount}>({sortedClients.length})</Text>
           </View>
-        }
-      />
+
+          {sortedClients.length === 0 ? (
+            <Card style={styles.emptyCard}>
+              <CardContent style={styles.emptyContent}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="people-outline" size={72} color={Colors.grayLight} />
+                </View>
+                <Text style={styles.emptyTitle}>
+                  {searchQuery ? 'Aucun client trouvé' : 'Aucun client'}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  {searchQuery 
+                    ? 'Essayez une autre recherche' 
+                    : 'Ajoutez votre premier client'}
+                </Text>
+                {!searchQuery && (
+                  <TouchableOpacity style={styles.emptyButton} onPress={() => openForm()}>
+                    <Ionicons name="add-circle" size={20} color={Colors.white} />
+                    <Text style={styles.emptyButtonText}>Ajouter un client</Text>
+                  </TouchableOpacity>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <FlatList
+              data={sortedClients}
+              renderItem={renderClient}
+              keyExtractor={(item) => item.id!.toString()}
+              scrollEnabled={false}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
+      </ScrollView>
 
       {/* Modal Formulaire */}
       <Modal
@@ -281,97 +400,190 @@ export default function ClientsList() {
           )}
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F5F7FA',
   },
+
+  // ===== HEADER =====
   header: {
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingBottom: 32,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  headerBgEffect: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 180,
+    height: 180,
+    backgroundColor: Colors.primary,
+    borderRadius: 90,
+    opacity: 0.15,
+  },
+  headerBgEffect2: {
+    position: 'absolute',
+    bottom: -60,
+    left: -60,
+    width: 200,
+    height: 200,
+    backgroundColor: Colors.primary,
+    borderRadius: 100,
+    opacity: 0.08,
+  },
+  headerContent: {
+    gap: 8,
   },
   headerTop: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIcon: {
+    width: 52,
+    height: 52,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: Colors.white,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginLeft: 64,
   },
-  addButton: {
-    width: 44,
-    height: 44,
+  addButtonHeader: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 40,
+    height: 40,
     backgroundColor: Colors.primary,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // ===== CONTENT =====
+  scrollContent: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 16,
+    paddingTop: 20,
+  },
+
+  // ===== STATISTIQUES =====
+  statsContainer: {
+    marginBottom: 20,
+  },
+  totalCard: {
+    backgroundColor: Colors.primary,
+    borderWidth: 0,
+    marginBottom: 12,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  totalContent: {
+    padding: 20,
+  },
+  totalLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  totalIconLarge: {
+    width: 64,
+    height: 64,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  totalInfo: {
+    flex: 1,
+  },
+  totalLabel: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 4,
+  },
+  totalValue: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+
+  // Stats Row
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+  statContent: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  statIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.secondary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+
+  // ===== RECHERCHE =====
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 16,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 15,
-    color: Colors.white,
-  },
-  tabsContainer: {
-    flexGrow: 0,
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginRight: 8,
-  },
-  tabActive: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.grayDark,
-    marginLeft: 6,
-  },
-  tabTextActive: {
-    color: Colors.primary,
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  clientCard: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.border,
     shadowColor: Colors.black,
@@ -380,9 +592,90 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  clientHeader: {
+  searchInput: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 15,
+    color: Colors.secondary,
+  },
+
+  // ===== TABS =====
+  tabsContainer: {
+    flexGrow: 0,
+    marginBottom: 20,
+  },
+  tab: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  tabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.grayDark,
+    marginLeft: 6,
+  },
+  tabTextActive: {
+    color: Colors.secondary,
+  },
+
+  // ===== LISTE =====
+  listSection: {
+    marginBottom: 16,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  listTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.secondary,
+    flex: 1,
+  },
+  listCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+
+  // ===== CLIENT CARD =====
+  clientCard: {
+    marginBottom: 12,
+    backgroundColor: Colors.white,
+    borderWidth: 0,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  clientCardContent: {
+    padding: 16,
+  },
+  clientHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  clientLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
   },
   avatar: {
     width: 48,
@@ -391,16 +684,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
     position: 'relative',
   },
   avatarCredit: {
-    backgroundColor: Colors.error,
+    backgroundColor: Colors.warning,
   },
   avatarText: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.secondary,
+    color: Colors.white,
   },
   starBadge: {
     position: 'absolute',
@@ -425,18 +717,31 @@ const styles = StyleSheet.create({
   clientMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   clientPhone: {
     fontSize: 13,
-    color: Colors.grayDark,
-    marginLeft: 4,
+    color: Colors.textSecondary,
+  },
+  clientRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   activeBadge: {
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    backgroundColor: '#8BC34A20',
-    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.accent,
   },
   activeBadgeText: {
     fontSize: 11,
@@ -444,41 +749,50 @@ const styles = StyleSheet.create({
     color: Colors.accent,
   },
   clientFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: '#F0F0F0',
   },
-  creditBadge: {
+  creditInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#FF444410',
-    borderRadius: 8,
+    gap: 6,
   },
-  creditText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.error,
-    marginLeft: 4,
+  creditLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
-  emptyContainer: {
+  creditAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.warning,
+  },
+
+  // ===== EMPTY STATE =====
+  emptyCard: {
+    backgroundColor: Colors.white,
+  },
+  emptyContent: {
+    paddingVertical: 64,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
   },
-  emptyText: {
-    fontSize: 18,
+  emptyIcon: {
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
     fontWeight: '600',
     color: Colors.secondary,
-    marginTop: 16,
+    marginBottom: 8,
   },
-  emptySubtext: {
+  emptySubtitle: {
     fontSize: 14,
-    color: Colors.grayDark,
-    marginTop: 8,
+    color: Colors.textSecondary,
+    textAlign: 'center',
     marginBottom: 24,
   },
   emptyButton: {
@@ -495,6 +809,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.secondary,
   },
+
+  // ===== MODALS =====
   modalContainer: {
     flex: 1,
     backgroundColor: Colors.background,

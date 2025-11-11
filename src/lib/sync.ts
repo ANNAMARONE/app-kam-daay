@@ -189,31 +189,26 @@ class SyncService {
         rappels: localData.rappels.length
       });
 
-      // Log des ventes pour débogage
+      // Log des paiements bruts AVANT conversion
+      if (localData.paiements.length > 0) {
+        console.log('🔍 Exemple de paiement LOCAL BRUT (SQLite):', localData.paiements[0]);
+      } else {
+        console.log('⚠️ Aucun paiement trouvé dans SQLite');
+      }
+
+      // Log de TOUTES les ventes pour debug duplication
       if (localData.ventes.length > 0) {
-        console.log('🔍 Exemple de vente locale AVANT conversion:', {
-          id: localData.ventes[0].id,
-          clientId: localData.ventes[0].clientId,
-          total: localData.ventes[0].total,
-          typeofId: typeof localData.ventes[0].id,
-          typeofClientId: typeof localData.ventes[0].clientId
-        });
-        
-        // Vérifier toutes les ventes pour clientId invalide
-        localData.ventes.forEach((vente, index) => {
-          if (!vente.id || !vente.clientId) {
-            console.error(`❌ Vente ${index} a des IDs invalides:`, {
-              id: vente.id,
-              clientId: vente.clientId,
-              total: vente.total
-            });
-          }
-        });
+        console.log('🔍 TOUTES les ventes locales (SQLite) :', localData.ventes.map(v => ({
+          id: v.id,
+          clientId: v.clientId,
+          total: v.total,
+          date: new Date(v.date).toLocaleString()
+        })));
       }
 
       // Convertir au format serveur
       console.log('🔄 Conversion au format serveur...');
-      const serverData = mapAllDataToServer(localData);
+      const serverData = await mapAllDataToServer(localData);
 
       console.log('📤 Données converties pour envoi:', {
         clients: serverData.clients.length,
@@ -236,6 +231,24 @@ class SyncService {
         }
       }
 
+      // Sauvegarder les mappings pour les ventes
+      for (let i = 0; i < localData.ventes.length; i++) {
+        const localVente = localData.ventes[i];
+        const serverVente = serverData.ventes[i];
+        if (localVente.id && serverVente.id) {
+          await db.saveUuidMapping(serverVente.id, localVente.id, 'vente');
+        }
+      }
+
+      // Sauvegarder les mappings pour les paiements
+      for (let i = 0; i < localData.paiements.length; i++) {
+        const localPaiement = localData.paiements[i];
+        const serverPaiement = serverData.paiements[i];
+        if (localPaiement.id && serverPaiement.id) {
+          await db.saveUuidMapping(serverPaiement.id, localPaiement.id, 'paiement');
+        }
+      }
+
       // Log d'un exemple de client pour vérification
       if (serverData.clients.length > 0) {
         console.log('📋 Exemple de client converti:', serverData.clients[0]);
@@ -247,6 +260,27 @@ class SyncService {
           id: serverData.ventes[0].id,
           clientId: serverData.ventes[0].clientId,
           montant: serverData.ventes[0].montant
+        });
+      }
+
+      // Log des paiements convertis pour vérification
+      if (serverData.paiements.length > 0) {
+        console.log('💰 Exemple de paiement converti:', {
+          id: serverData.paiements[0].id,
+          venteId: serverData.paiements[0].venteId,
+          montant: serverData.paiements[0].montant,
+          datePaiement: serverData.paiements[0].datePaiement
+        });
+        
+        // Vérifier tous les paiements pour venteId invalide
+        serverData.paiements.forEach((paiement, index) => {
+          if (!paiement.id || !paiement.venteId) {
+            console.error(`❌ Paiement ${index} a des IDs invalides:`, {
+              id: paiement.id,
+              venteId: paiement.venteId,
+              montant: paiement.montant
+            });
+          }
         });
       }
 
@@ -438,14 +472,54 @@ class SyncService {
         }
       }
       
-      // Templates
-      for (const template of localData.templates) {
+      // Templates - Vérification de l'UUID pour éviter les doublons
+      for (const serverTemplate of serverData.templates || []) {
         try {
-          await db.addTemplate(template);
-          insertedCount++;
-          console.log(`  ✅ Template ajouté: ${template.nom}`);
+          // Ignorer les templates avec message NULL
+          if (!serverTemplate.message || serverTemplate.message.trim() === '') {
+            console.log(`  ⚠️ Template "${serverTemplate.nom}" ignoré (message vide ou NULL)`);
+            continue;
+          }
+          
+          // Vérifier si le template existe déjà localement via son UUID
+          const existingLocalId = await db.getLocalIdFromUuid(serverTemplate.id, 'template');
+          
+          if (existingLocalId) {
+            // Template existe déjà, on le met à jour
+            await db.updateTemplate(existingLocalId, {
+              nom: serverTemplate.nom,
+              message: serverTemplate.message
+            });
+            updatedCount++;
+            console.log(`  🔄 Template mis à jour: ${serverTemplate.nom}`);
+          } else {
+            // Vérifier aussi par nom pour éviter les doublons même sans UUID mapping
+            const existingTemplates = await db.getAllTemplates();
+            const duplicateTemplate = existingTemplates.find(t => 
+              t.nom === serverTemplate.nom && t.message === serverTemplate.message
+            );
+            
+            if (duplicateTemplate && duplicateTemplate.id) {
+              // Template existe déjà par nom+message, juste créer le mapping
+              await db.saveUuidMapping(serverTemplate.id, duplicateTemplate.id, 'template');
+              updatedCount++;
+              console.log(`  🔗 Mapping créé pour template existant: ${serverTemplate.nom}`);
+            } else {
+              // Nouveau template
+              const template = {
+                nom: serverTemplate.nom,
+                message: serverTemplate.message
+              };
+              const localId = await db.addTemplate(template);
+              insertedCount++;
+              
+              // Sauvegarder le mapping UUID → ID local
+              await db.saveUuidMapping(serverTemplate.id, localId, 'template');
+              console.log(`  ✅ Template ajouté: ${serverTemplate.nom}`);
+            }
+          }
         } catch (error) {
-          console.error(`  ❌ Erreur template ${template.nom}:`, error);
+          console.error(`  ❌ Erreur template ${serverTemplate.nom}:`, error);
         }
       }
       
@@ -463,12 +537,39 @@ class SyncService {
       // Ventes (avec mapping des UUIDs vers IDs locaux)
       for (const serverVente of serverData.ventes || []) {
         try {
+          // Vérifier si la vente existe déjà localement via son UUID
+          const existingVenteId = await db.getLocalIdFromUuid(serverVente.id, 'vente');
+          
+          if (existingVenteId) {
+            // Vente existe déjà, on la passe
+            updatedCount++;
+            console.log(`  🔄 Vente déjà existante (UUID): ${serverVente.montant} CFA (ignorée)`);
+            continue;
+          }
+          
           // Récupérer l'ID local du client à partir de son UUID
           const localClientId = clientUuidToLocalId.get(serverVente.client_id) || 
                                 await db.getLocalIdFromUuid(serverVente.client_id, 'client');
           
           if (!localClientId) {
             console.warn(`  ⚠️ Client UUID ${serverVente.client_id} introuvable localement, vente ignorée`);
+            continue;
+          }
+          
+          // Vérifier aussi si une vente similaire existe déjà (même client, même montant, même date)
+          const allVentes = await db.getAllVentes();
+          const venteDate = new Date(serverVente.date_vente || Date.now()).getTime();
+          const duplicateVente = allVentes.find(v => 
+            v.clientId === localClientId && 
+            v.total === serverVente.montant &&
+            Math.abs(v.date - venteDate) < 60000 // Moins d'1 minute de différence
+          );
+          
+          if (duplicateVente && duplicateVente.id) {
+            // Vente existe déjà, juste créer le mapping
+            await db.saveUuidMapping(serverVente.id, duplicateVente.id, 'vente');
+            updatedCount++;
+            console.log(`  🔗 Mapping créé pour vente existante: ${serverVente.montant} CFA`);
             continue;
           }
           
@@ -481,11 +582,15 @@ class SyncService {
             total: serverVente.montant,
             montantPaye: serverVente.montant_paye,
             statut: serverVente.type_paiement as 'Payé' | 'Crédit' | 'Partiel',
-            date: new Date(serverVente.date_vente || Date.now()).getTime()
+            date: venteDate
           };
           
-          await db.addVente(vente);
+          const localVenteId = await db.addVente(vente);
           insertedCount++;
+          
+          // Sauvegarder le mapping UUID → ID local pour la vente
+          await db.saveUuidMapping(serverVente.id, localVenteId, 'vente');
+          
           console.log(`  ✅ Vente ajoutée: ${vente.total} CFA (client local #${localClientId})`);
         } catch (error) {
           console.error(`  ❌ Erreur vente:`, error);
@@ -580,22 +685,16 @@ class SyncService {
     // Note: Ne pas synchroniser immédiatement ici car la DB peut ne pas être prête
     // La synchronisation initiale est gérée dans App.tsx après init DB
 
-    // Synchroniser toutes les X minutes
+    // Synchroniser toutes les X minutes (SEULEMENT télécharger, pas uploader)
     this.autoSyncInterval = setInterval(async () => {
       const isAuth = await this.isAuthenticated();
       if (isAuth && !this.syncState.isSyncing) {
-        console.log('⏰ Synchronisation automatique périodique...');
-        this.syncToServer();
+        console.log('⏰ Synchronisation automatique périodique (téléchargement uniquement)...');
+        // Seulement télécharger les données du serveur
+        // L'upload se fait manuellement ou quand l'utilisateur crée/modifie des données
+        this.syncFromServer();
       }
     }, intervalMinutes * 60 * 1000);
-
-    // Écouter les changements de connexion
-    NetInfo.addEventListener(state => {
-      if (state.isConnected) {
-        console.log('📶 Connexion rétablie, synchronisation...');
-        this.syncToServer();
-      }
-    });
   }
 
   stopAutoSync() {

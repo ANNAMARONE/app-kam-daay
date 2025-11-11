@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../lib/store';
@@ -10,20 +10,28 @@ import { formatCurrency, formatDate } from '../lib/utils';
 export default function RappelsPage() {
   const { rappels, clients, ventes, paiements, updateRappel, addRappel, deleteRappel } = useStore();
   const [filter, setFilter] = useState<'tous' | 'actifs' | 'resolus'>('actifs');
+  const hasCheckedCredits = useRef(false);
 
   // Créer automatiquement des rappels pour les crédits en retard
   useEffect(() => {
+    // N'exécuter qu'une seule fois au montage
+    if (hasCheckedCredits.current) return;
+    hasCheckedCredits.current = true;
+
     const checkCreditsEnRetard = async () => {
       const now = Date.now();
       const SEPT_JOURS = 7 * 24 * 60 * 60 * 1000;
 
+      console.log('🔍 Vérification des crédits en retard...');
+      
       for (const vente of ventes) {
         if (vente.statut === 'Crédit' || vente.statut === 'Partiel') {
           const paiementsVente = paiements.filter(p => p.venteId === vente.id);
-          const totalPaye = paiementsVente.reduce((sum, p) => sum + p.montant, 0) + vente.montantPaye;
+          const totalPaye = paiementsVente.reduce((sum, p) => sum + p.montant, 0) + (vente.montantPaye || 0);
           const reste = vente.total - totalPaye;
 
           if (reste > 0 && (now - vente.date > SEPT_JOURS)) {
+            // Vérifier si un rappel actif existe déjà pour cette vente
             const rappelExiste = rappels.find(
               r => r.venteId === vente.id && !r.resolu
             );
@@ -31,23 +39,36 @@ export default function RappelsPage() {
             if (!rappelExiste) {
               const client = clients.find(c => c.id === vente.clientId);
               if (client) {
-                await addRappel({
-                  clientId: vente.clientId,
-                  venteId: vente.id!,
-                  message: `Crédit en retard de ${formatCurrency(reste)} pour ${client.prenom} ${client.nom}`,
-                  dateLimite: now + (3 * 24 * 60 * 60 * 1000),
-                  resolu: false,
-                  dateCreation: now
-                });
+                console.log(`📝 Création rappel pour ${client.prenom} ${client.nom}: ${formatCurrency(reste)}`);
+                try {
+                  await addRappel({
+                    clientId: vente.clientId,
+                    venteId: vente.id!,
+                    message: `Crédit en retard de ${formatCurrency(reste)} pour ${client.prenom} ${client.nom}`,
+                    dateLimite: now + (3 * 24 * 60 * 60 * 1000), // Dans 3 jours
+                    resolu: false,
+                    dateCreation: now
+                  });
+                } catch (error) {
+                  console.error('❌ Erreur création rappel:', error);
+                }
               }
             }
           }
         }
       }
+      console.log('✅ Vérification des crédits terminée');
     };
 
-    checkCreditsEnRetard();
-  }, [ventes, paiements, rappels, clients, addRappel]);
+    // Délai pour s'assurer que les données sont chargées
+    const timer = setTimeout(() => {
+      if (ventes.length > 0) {
+        checkCreditsEnRetard();
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, []); // Dépendances vides - s'exécute une seule fois
 
   const rappelsFiltres = rappels.filter(r => {
     if (filter === 'actifs') return !r.resolu;
@@ -208,11 +229,11 @@ export default function RappelsPage() {
               return (
                 <Card
                   key={rappel.id}
-                  style={StyleSheet.flatten([
+                  style={[
                     styles.rappelCard,
-                    rappel.resolu ? styles.rappelCardResolu : null,
-                    enRetard && !rappel.resolu ? styles.rappelCardEnRetard : null,
-                  ])}
+                    rappel.resolu && styles.rappelCardResolu,
+                    enRetard && !rappel.resolu && styles.rappelCardEnRetard,
+                  ]}
                 >
                   <CardContent style={styles.rappelContent}>
                     <View style={styles.rappelHeader}>

@@ -279,49 +279,6 @@ export class KameDaayDatabase {
 
   // === UUID MAPPINGS ===
   async saveUuidMapping(uuid: string, localId: number, entityType: 'client' | 'vente' | 'paiement' | 'produit' | 'template' | 'objectif' | 'depense' | 'rappel'): Promise<void> {
-    await this.db.runAsync(
-      'INSERT OR REPLACE INTO uuid_mappings (uuid, localId, entityType) VALUES (?, ?, ?)',
-      [uuid, localId, entityType]
-    );
-  }
-
-  async getLocalIdFromUuid(uuid: string, entityType: string): Promise<number | null> {
-    const result = await this.db.getAllAsync<{localId: number}>(
-      'SELECT localId FROM uuid_mappings WHERE uuid = ? AND entityType = ? LIMIT 1',
-      [uuid, entityType]
-    );
-    return result.length > 0 ? result[0].localId : null;
-  }
-
-  async getUuidFromLocalId(localId: number, entityType: string): Promise<string | null> {
-    const result = await this.db.getAllAsync<{uuid: string}>(
-      'SELECT uuid FROM uuid_mappings WHERE localId = ? AND entityType = ? LIMIT 1',
-      [localId, entityType]
-    );
-    return result.length > 0 ? result[0].uuid : null;
-  }
-
-  // === MIGRATION & CLEANUP ===
-  async cleanupCorruptedVentes(): Promise<void> {
-    console.log('🧹 Nettoyage des ventes corrompues...');
-    
-    // Supprimer toutes les ventes dont le clientId n'est pas un nombre
-    const allVentes = await this.db.getAllAsync<any>('SELECT * FROM ventes');
-    
-    let cleaned = 0;
-    for (const vente of allVentes) {
-      if (typeof vente.clientId !== 'number') {
-        console.log(`  ❌ Suppression vente ${vente.id} avec clientId invalide: ${vente.clientId}`);
-        await this.db.runAsync('DELETE FROM ventes WHERE id = ?', [vente.id]);
-        cleaned++;
-      }
-    }
-    
-    console.log(`✅ ${cleaned} ventes corrompues supprimées`);
-  }
-
-  // === UUID MAPPINGS (pour synchronisation) ===
-  async saveUuidMapping(uuid: string, localId: number, entityType: string): Promise<void> {
     try {
       await this.db.runAsync(
         'INSERT OR REPLACE INTO uuid_mappings (uuid, localId, entityType) VALUES (?, ?, ?)',
@@ -359,6 +316,19 @@ export class KameDaayDatabase {
     }
   }
 
+  async getUuidFromLocalId(localId: number, entityType: string): Promise<string | null> {
+    try {
+      const result = await this.db.getAllAsync<{uuid: string}>(
+        'SELECT uuid FROM uuid_mappings WHERE localId = ? AND entityType = ? LIMIT 1',
+        [localId, entityType]
+      );
+      return result.length > 0 ? result[0].uuid : null;
+    } catch (error) {
+      console.error('❌ Erreur getUuidFromLocalId:', error);
+      return null;
+    }
+  }
+
   async clearUuidMappings(): Promise<void> {
     try {
       await this.db.runAsync('DELETE FROM uuid_mappings');
@@ -367,6 +337,25 @@ export class KameDaayDatabase {
       console.error('❌ Erreur clearUuidMappings:', error);
       throw error;
     }
+  }
+
+  // === MIGRATION & CLEANUP ===
+  async cleanupCorruptedVentes(): Promise<void> {
+    console.log('🧹 Nettoyage des ventes corrompues...');
+    
+    // Supprimer toutes les ventes dont le clientId n'est pas un nombre
+    const allVentes = await this.db.getAllAsync<any>('SELECT * FROM ventes');
+    
+    let cleaned = 0;
+    for (const vente of allVentes) {
+      if (typeof vente.clientId !== 'number') {
+        console.log(`  ❌ Suppression vente ${vente.id} avec clientId invalide: ${vente.clientId}`);
+        await this.db.runAsync('DELETE FROM ventes WHERE id = ?', [vente.id]);
+        cleaned++;
+      }
+    }
+    
+    console.log(`✅ ${cleaned} ventes corrompues supprimées`);
   }
 
   // === VENTES ===
@@ -469,6 +458,19 @@ export class KameDaayDatabase {
 
   async getAllTemplates(): Promise<Template[]> {
     return await this.db.getAllAsync<Template>('SELECT * FROM templates');
+  }
+
+  async updateTemplate(id: number, template: Partial<Template>): Promise<void> {
+    const fields = Object.keys(template).filter(k => k !== 'id');
+    const values = fields.map(k => (template as any)[k]);
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+
+    if (fields.length > 0) {
+      await this.db.runAsync(
+        `UPDATE templates SET ${setClause} WHERE id = ?`,
+        [...values, id]
+      );
+    }
   }
 
   async deleteTemplate(id: number): Promise<void> {

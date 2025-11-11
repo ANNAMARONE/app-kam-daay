@@ -89,14 +89,26 @@ const generateUuidFromId = (id: number | undefined, type: string): string => {
 // MAPPING MOBILE → SERVEUR
 // ============================================================================
 
-export const mapClientToServer = (client: Client) => {
+export const mapClientToServer = async (client: Client) => {
   if (!client.id) {
     console.error('❌ Client sans ID:', client);
     throw new Error(`Client sans ID: ${client.nom} ${client.prenom}`);
   }
   
+  // Essayer de récupérer l'UUID existant depuis les mappings
+  const db = getDatabaseInstance();
+  let uuid = null;
+  if (db) {
+    uuid = await db.getUuidFromLocalId(client.id, 'client');
+  }
+  
+  // Si pas de mapping existant, générer un nouveau UUID déterministe
+  if (!uuid) {
+    uuid = generateUuidFromId(client.id, 'client');
+  }
+  
   return {
-    id: generateUuidFromId(client.id, 'client'),
+    id: uuid,
     nom: client.nom,
     prenom: client.prenom,
     telephone: client.telephone,
@@ -106,7 +118,7 @@ export const mapClientToServer = (client: Client) => {
   };
 };
 
-export const mapVenteToServer = (vente: Vente) => {
+export const mapVenteToServer = async (vente: Vente) => {
   // Log détaillé de la vente
   console.log('🔍 Mapping vente:', {
     id: vente.id,
@@ -127,8 +139,23 @@ export const mapVenteToServer = (vente: Vente) => {
     throw new Error(`Vente avec clientId invalide: ${vente.clientId} (type: ${typeof vente.clientId}, venteId: ${vente.id})`);
   }
   
-  const venteUuid = generateUuidFromId(vente.id, 'vente');
-  const clientUuid = generateUuidFromId(vente.clientId, 'client');
+  // Essayer de récupérer les UUIDs existants depuis les mappings
+  const db = getDatabaseInstance();
+  let venteUuid = null;
+  let clientUuid = null;
+  
+  if (db) {
+    venteUuid = await db.getUuidFromLocalId(vente.id, 'vente');
+    clientUuid = await db.getUuidFromLocalId(vente.clientId, 'client');
+  }
+  
+  // Si pas de mappings existants, générer de nouveaux UUIDs déterministes
+  if (!venteUuid) {
+    venteUuid = generateUuidFromId(vente.id, 'vente');
+  }
+  if (!clientUuid) {
+    clientUuid = generateUuidFromId(vente.clientId, 'client');
+  }
   
   console.log(`  ✅ UUIDs générés: vente=${venteUuid}, client=${clientUuid}`);
   
@@ -318,7 +345,7 @@ export const mapRappelFromServer = (serverRappel: any): Rappel => ({
 // FONCTIONS DE MAPPING EN MASSE
 // ============================================================================
 
-export const mapAllDataToServer = (data: {
+export const mapAllDataToServer = async (data: {
   clients: Client[];
   ventes: Vente[];
   paiements: Paiement[];
@@ -327,16 +354,24 @@ export const mapAllDataToServer = (data: {
   objectifs: Objectif[];
   depenses: Depense[];
   rappels: Rappel[];
-}) => ({
-  clients: data.clients.map(mapClientToServer),
-  ventes: data.ventes.map(mapVenteToServer),
-  paiements: data.paiements.map(mapPaiementToServer),
-  produits: data.produits.map(mapProduitToServer),
-  templates: data.templates.map(mapTemplateToServer),
-  objectifs: data.objectifs.map(mapObjectifToServer),
-  depenses: data.depenses.map(mapDepenseToServer),
-  rappels: data.rappels.map(mapRappelToServer)
-});
+}) => {
+  // Mapper les clients et ventes en parallèle (avec await)
+  const [clients, ventes] = await Promise.all([
+    Promise.all(data.clients.map(mapClientToServer)),
+    Promise.all(data.ventes.map(mapVenteToServer))
+  ]);
+  
+  return {
+    clients,
+    ventes,
+    paiements: data.paiements.map(mapPaiementToServer),
+    produits: data.produits.map(mapProduitToServer),
+    templates: data.templates.map(mapTemplateToServer),
+    objectifs: data.objectifs.map(mapObjectifToServer),
+    depenses: data.depenses.map(mapDepenseToServer),
+    rappels: data.rappels.map(mapRappelToServer)
+  };
+};
 
 export const mapAllDataFromServer = (serverData: any) => ({
   clients: (serverData.clients || []).map(mapClientFromServer),

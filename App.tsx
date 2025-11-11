@@ -67,6 +67,12 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
     },
   ];
 
+  // Calculer les hauteurs fixes
+  const headerHeight = 88; // hauteur du header
+  const footerHeight = 56; // hauteur du footer
+  const maxMenuHeight = screenHeight * 0.8; // 80% de l'écran
+  const contentHeight = maxMenuHeight - headerHeight - footerHeight;
+
   return (
     <Modal
       visible={visible}
@@ -83,8 +89,7 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
         <View style={[
           styles.menuContainer,
           { 
-            paddingBottom: insets.bottom > 0 ? insets.bottom : 16,
-            maxHeight: screenHeight * 0.75, // 75% de la hauteur de l'écran
+            maxHeight: maxMenuHeight,
           }
         ]}>
           {/* Header */}
@@ -103,18 +108,22 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
             </TouchableOpacity>
           </View>
 
-          {/* Menu Items */}
+          {/* Menu Items - ScrollView avec hauteur calculée */}
           <ScrollView 
-            style={styles.menuContent}
+            style={[styles.menuContent, { maxHeight: contentHeight }]}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 8 }}
+            contentContainerStyle={{ 
+              paddingVertical: 16,
+              paddingHorizontal: 16,
+              paddingBottom: 24,
+            }}
           >
             {menuItems.map((item, index) => (
               <TouchableOpacity
                 key={item.name}
                 style={[
                   styles.menuItem,
-                  index === 0 && styles.menuItemFirst
+                  index === menuItems.length - 1 && { marginBottom: 0 }
                 ]}
                 onPress={() => {
                   onNavigate(item.name);
@@ -141,8 +150,11 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
             ))}
           </ScrollView>
 
-          {/* Footer */}
-          <View style={styles.menuFooter}>
+          {/* Footer - Toujours visible en bas */}
+          <View style={[
+            styles.menuFooter,
+            { paddingBottom: insets.bottom > 0 ? insets.bottom : 16 }
+          ]}>
             <Text style={styles.menuFooterText}>Kame Daay • Version 1.0</Text>
           </View>
         </View>
@@ -209,9 +221,10 @@ function AppContent() {
       
       // Synchroniser immédiatement (petite attente pour laisser l'UI se charger)
       const timer = setTimeout(async () => {
-        console.log('🔄 Synchronisation bidirectionnelle au démarrage...');
-        // D'abord télécharger les données du serveur, puis envoyer les modifications locales
-        await syncService.fullSync();
+        console.log('🔄 Téléchargement des données du serveur au démarrage...');
+        // Au démarrage, SEULEMENT télécharger du serveur (pas d'upload automatique)
+        // L'upload se fera automatiquement quand il y aura des modifications locales
+        await syncService.syncFromServer();
       }, 2000);
       
       return () => {
@@ -664,8 +677,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   menuContent: {
-    flex: 1,
-    padding: 16,
+    // Pas de flex: 1 ici, la hauteur est contrôlée directement
   },
   menuItem: {
     flexDirection: 'row',
@@ -683,7 +695,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   menuItemFirst: {
-    marginTop: 4,
+    marginTop: 0,
   },
   menuItemIconContainer: {
     width: 48,

@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import React, { useMemo, useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, RefreshControl, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useStore } from '../lib/store';
 import { Card, CardContent } from './ui/Card';
@@ -12,47 +13,153 @@ import ClientForm from './ClientForm';
 
 export default function Dashboard() {
   const navigation = useNavigation();
-  const { ventes, clients, paiements } = useStore();
+  const { ventes, clients, paiements, loadData } = useStore();
   const [showClientModal, setShowClientModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
 
-  // Calculer les statistiques
+  // Animation d'entrée
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Pull to refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  // Calculer les statistiques avec comparaison
   const stats = useMemo(() => {
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const twoWeeksAgo = now - 14 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const sixtyDaysAgo = now - 60 * 24 * 60 * 60 * 1000;
+
+    // Ventes par période
     const dailyTotal = calculateDailyTotal(ventes);
+    const previousDayTotal = ventes
+      .filter(v => v.date >= oneDayAgo - 24 * 60 * 60 * 1000 && v.date < oneDayAgo)
+      .reduce((sum, v) => sum + (v.total || 0), 0);
+    
     const weeklyTotal = calculateWeeklyTotal(ventes);
+    const previousWeekTotal = ventes
+      .filter(v => v.date >= twoWeeksAgo && v.date < oneWeekAgo)
+      .reduce((sum, v) => sum + (v.total || 0), 0);
+
     const monthlyTotal = ventes
       .filter(v => {
         const venteDate = new Date(v.date);
-        const now = new Date();
-        return venteDate.getMonth() === now.getMonth() && 
-               venteDate.getFullYear() === now.getFullYear();
+        const nowDate = new Date();
+        return venteDate.getMonth() === nowDate.getMonth() && 
+               venteDate.getFullYear() === nowDate.getFullYear();
       })
       .reduce((sum, v) => sum + (v.total || 0), 0);
 
-    // Total des crédits
+    const previousMonthTotal = ventes
+      .filter(v => v.date >= sixtyDaysAgo && v.date < thirtyDaysAgo)
+      .reduce((sum, v) => sum + (v.total || 0), 0);
+
+    // Calcul des variations en %
+    const dailyChange = previousDayTotal > 0 
+      ? ((dailyTotal - previousDayTotal) / previousDayTotal) * 100 
+      : dailyTotal > 0 ? 100 : 0;
+    
+    const weeklyChange = previousWeekTotal > 0 
+      ? ((weeklyTotal - previousWeekTotal) / previousWeekTotal) * 100 
+      : weeklyTotal > 0 ? 100 : 0;
+
+    const monthlyChange = previousMonthTotal > 0 
+      ? ((monthlyTotal - previousMonthTotal) / previousMonthTotal) * 100 
+      : monthlyTotal > 0 ? 100 : 0;
+
+    // Total des crédits avec détails
+    const creditVentes = ventes.filter(v => v.statut === 'Crédit' || v.statut === 'Partiel');
     const totalVentes = ventes.reduce((sum, v) => sum + (v.total || 0), 0);
     const totalPaiements = paiements.reduce((sum, p) => sum + (p.montant || 0), 0);
-    const totalCredits = totalVentes - totalPaiements;
+    const totalMontantPaye = ventes.reduce((sum, v) => sum + (v.montantPaye || 0), 0);
+    const totalCredits = totalVentes - totalPaiements - totalMontantPaye;
+    const nbCredits = creditVentes.length;
 
-    // Clients actifs (visités dans les 30 derniers jours)
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    // Clients actifs et VIP
     const activeClients = clients.filter(c => 
       c.derniereVisite && c.derniereVisite > thirtyDaysAgo
     ).length;
+
+    // Clients VIP (>3 ventes et total >50000 CFA)
+    const clientsVIP = clients.filter(c => {
+      const clientVentes = ventes.filter(v => v.clientId === c.id);
+      const totalClient = clientVentes.reduce((sum, v) => sum + (v.total || 0), 0);
+      return clientVentes.length >= 3 && totalClient >= 50000;
+    });
+
+    // Top 3 clients
+    const topClients = clients
+      .map(c => {
+        const clientVentes = ventes.filter(v => v.clientId === c.id);
+        const totalClient = clientVentes.reduce((sum, v) => sum + (v.total || 0), 0);
+        return { ...c, total: totalClient, nbVentes: clientVentes.length };
+      })
+      .filter(c => c.nbVentes > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3);
 
     // Dernières ventes
     const recentVentes = [...ventes]
       .sort((a, b) => b.date - a.date)
       .slice(0, 5);
 
+    // Objectif mensuel (fixe à 500,000 CFA pour l'exemple)
+    const objectifMensuel = 500000;
+    const progressionObjectif = (monthlyTotal / objectifMensuel) * 100;
+
+    // Mini graphique des 7 derniers jours
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = now - (6 - i) * 24 * 60 * 60 * 1000;
+      const dayStart = new Date(date).setHours(0, 0, 0, 0);
+      const dayEnd = new Date(date).setHours(23, 59, 59, 999);
+      const total = ventes
+        .filter(v => v.date >= dayStart && v.date <= dayEnd)
+        .reduce((sum, v) => sum + (v.total || 0), 0);
+      return total;
+    });
+
+    const maxLast7Days = Math.max(...last7Days, 1);
+
     return {
       dailyTotal,
       weeklyTotal,
       monthlyTotal,
+      dailyChange,
+      weeklyChange,
+      monthlyChange,
       totalCredits,
+      nbCredits,
       totalClients: clients.length,
       activeClients,
+      clientsVIP: clientsVIP.length,
+      topClients,
       totalVentes: ventes.length,
       recentVentes,
+      objectifMensuel,
+      progressionObjectif,
+      last7Days,
+      maxLast7Days,
     };
   }, [ventes, clients, paiements]);
 
@@ -92,6 +199,13 @@ export default function Dashboard() {
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.primary]}
+          />
+        }
       >
         {/* Header avec date et salutation */}
         <View style={styles.header}>
@@ -145,7 +259,7 @@ export default function Dashboard() {
 
         {/* KPIs Principaux */}
         <View style={styles.kpisContainer}>
-          {/* Ventes du Jour */}
+          {/* Ventes du Jour avec Tendance */}
           <TouchableOpacity 
             activeOpacity={0.8}
             onPress={handleVoirToutVentes}
@@ -158,10 +272,50 @@ export default function Dashboard() {
                   </View>
                   <View style={styles.kpiTextContainer}>
                     <Text style={styles.kpiLabel}>Aujourd'hui</Text>
-                    <Text style={[styles.kpiValue, { color: Colors.primary }]}>
-                      {formatCurrency(stats.dailyTotal)}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={[styles.kpiValue, { color: Colors.primary }]}>
+                        {formatCurrency(stats.dailyTotal)}
+                      </Text>
+                      {stats.dailyChange !== 0 && (
+                        <View style={[
+                          styles.changeIndicator,
+                          { backgroundColor: stats.dailyChange > 0 ? '#8BC34A20' : '#FF444420' }
+                        ]}>
+                          <Ionicons 
+                            name={stats.dailyChange > 0 ? 'trending-up' : 'trending-down'}
+                            size={14}
+                            color={stats.dailyChange > 0 ? Colors.accent : Colors.error}
+                          />
+                          <Text style={[
+                            styles.changeText,
+                            { color: stats.dailyChange > 0 ? Colors.accent : Colors.error }
+                          ]}>
+                            {Math.abs(stats.dailyChange).toFixed(0)}%
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
+                </View>
+                
+                {/* Mini graphique 7 derniers jours */}
+                <View style={styles.miniChart}>
+                  {stats.last7Days.map((value, index) => {
+                    const height = (value / stats.maxLast7Days) * 40 || 2;
+                    return (
+                      <View key={index} style={styles.miniChartBar}>
+                        <View 
+                          style={[
+                            styles.miniChartBarFill,
+                            { 
+                              height,
+                              backgroundColor: index === 6 ? Colors.primary : 'rgba(255, 215, 0, 0.3)'
+                            }
+                          ]} 
+                        />
+                      </View>
+                    );
+                  })}
                 </View>
               </CardContent>
             </Card>
@@ -248,8 +402,16 @@ export default function Dashboard() {
         </View>
 
         {/* Actions Rapides */}
-        <View style={styles.actionsSection}>
-          <Text style={styles.sectionTitle}>Actions Rapides</Text>
+        <Animated.View 
+          style={[
+            styles.actionsSection,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            }
+          ]}
+        >
+          <Text style={styles.sectionTitle}>⚡ Actions Rapides</Text>
           <View style={styles.actionsGrid}>
             <TouchableOpacity 
               style={styles.actionCard}
@@ -299,7 +461,234 @@ export default function Dashboard() {
               <Text style={styles.actionLabel}>Stats</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
+
+        {/* Objectif Mensuel */}
+        {stats.monthlyTotal > 0 && (
+          <Animated.View 
+            style={[
+              styles.objectifSection,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              }
+            ]}
+          >
+            <Card style={styles.objectifCard}>
+              <CardContent style={styles.objectifContent}>
+                <View style={styles.objectifHeader}>
+                  <View style={styles.objectifIconContainer}>
+                    <Ionicons name="trophy" size={24} color={Colors.primary} />
+                  </View>
+                  <View style={styles.objectifTextContainer}>
+                    <Text style={styles.objectifTitle}>🎯 Objectif du Mois</Text>
+                    <Text style={styles.objectifSubtitle}>
+                      {formatCurrency(stats.monthlyTotal)} / {formatCurrency(stats.objectifMensuel)}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Barre de progression */}
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBarBg}>
+                    <View 
+                      style={[
+                        styles.progressBarFill,
+                        { 
+                          width: `${Math.min(stats.progressionObjectif, 100)}%`,
+                          backgroundColor: stats.progressionObjectif >= 100 ? Colors.accent : 
+                                         stats.progressionObjectif >= 75 ? '#FFA726' : 
+                                         stats.progressionObjectif >= 50 ? '#2196F3' : Colors.primary
+                        }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.progressText}>
+                    {stats.progressionObjectif >= 100 ? '🎉 ' : ''}
+                    {stats.progressionObjectif.toFixed(0)}%
+                    {stats.progressionObjectif >= 100 ? ' Objectif atteint!' : ' complété'}
+                  </Text>
+                </View>
+
+                {/* Stats détaillées */}
+                <View style={styles.objectifStats}>
+                  <View style={styles.objectifStatItem}>
+                    <Text style={styles.objectifStatLabel}>Reste à faire</Text>
+                    <Text style={[
+                      styles.objectifStatValue,
+                      { color: stats.monthlyTotal >= stats.objectifMensuel ? Colors.accent : Colors.error }
+                    ]}>
+                      {formatCurrency(Math.max(0, stats.objectifMensuel - stats.monthlyTotal))}
+                    </Text>
+                  </View>
+                  <View style={styles.objectifStatDivider} />
+                  <View style={styles.objectifStatItem}>
+                    <Text style={styles.objectifStatLabel}>Progrès</Text>
+                    <Text style={[
+                      styles.objectifStatValue,
+                      { color: stats.monthlyChange > 0 ? Colors.accent : Colors.error }
+                    ]}>
+                      {stats.monthlyChange > 0 ? '+' : ''}{stats.monthlyChange.toFixed(0)}%
+                    </Text>
+                  </View>
+                </View>
+              </CardContent>
+            </Card>
+          </Animated.View>
+        )}
+
+        {/* Top 3 Clients VIP */}
+        {stats.topClients.length > 0 && (
+          <Animated.View 
+            style={[
+              styles.vipSection,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              }
+            ]}
+          >
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>👑 Top Clients VIP</Text>
+              <TouchableOpacity onPress={handleVoirToutClients}>
+                <Text style={styles.sectionLink}>Voir tout</Text>
+              </TouchableOpacity>
+            </View>
+
+            {stats.topClients.map((client, index) => {
+              const avatarColors = ['#FF6B6B', '#4ECDC4', '#45B7D1'];
+              const medalEmojis = ['🥇', '🥈', '🥉'];
+              
+              return (
+                <TouchableOpacity 
+                  key={client.id}
+                  activeOpacity={0.7}
+                  onPress={handleVoirToutClients}
+                >
+                  <Card style={styles.vipCard}>
+                    <CardContent style={styles.vipContent}>
+                      <View style={styles.vipLeft}>
+                        <View style={styles.vipRank}>
+                          <Text style={styles.vipRankEmoji}>{medalEmojis[index]}</Text>
+                        </View>
+                        <View style={[styles.vipAvatar, { backgroundColor: avatarColors[index] + '20' }]}>
+                          <Text style={[styles.vipAvatarText, { color: avatarColors[index] }]}>
+                            {client.prenom?.charAt(0).toUpperCase()}{client.nom?.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.vipInfo}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.vipName}>{client.prenom} {client.nom}</Text>
+                            {client.nbVentes >= 5 && (
+                              <View style={styles.vipBadge}>
+                                <Ionicons name="star" size={10} color={Colors.primary} />
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.vipStats}>
+                            {client.nbVentes} vente{client.nbVentes > 1 ? 's' : ''} • {client.telephone}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.vipRight}>
+                        <Text style={styles.vipTotal}>{formatCurrency(client.total)}</Text>
+                        <View style={[styles.vipLevelBadge, { backgroundColor: avatarColors[index] + '20' }]}>
+                          <Text style={[styles.vipLevelText, { color: avatarColors[index] }]}>
+                            {client.total >= 100000 ? 'Platine' : client.total >= 50000 ? 'Or' : 'Argent'}
+                          </Text>
+                        </View>
+                      </View>
+                    </CardContent>
+                  </Card>
+                </TouchableOpacity>
+              );
+            })}
+          </Animated.View>
+        )}
+
+        {/* Alertes et Insights Intelligents */}
+        {(stats.totalCredits > 50000 || stats.nbCredits >= 5 || stats.progressionObjectif < 30) && (
+          <Animated.View 
+            style={[
+              styles.insightsSection,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              }
+            ]}
+          >
+            <Text style={styles.sectionTitle}>💡 Insights & Alertes</Text>
+            
+            {stats.totalCredits > 50000 && (
+              <Card style={styles.insightCard}>
+                <CardContent style={styles.insightContent}>
+                  <View style={[styles.insightIcon, { backgroundColor: '#FF444420' }]}>
+                    <Ionicons name="warning" size={24} color={Colors.error} />
+                  </View>
+                  <View style={styles.insightText}>
+                    <Text style={styles.insightTitle}>⚠️ Crédits élevés</Text>
+                    <Text style={styles.insightDescription}>
+                      Vous avez {formatCurrency(stats.totalCredits)} de crédits en cours. 
+                      Pensez à relancer vos clients.
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.insightButton}
+                    onPress={handlePaiementCredit}
+                  >
+                    <Ionicons name="arrow-forward" size={20} color={Colors.error} />
+                  </TouchableOpacity>
+                </CardContent>
+              </Card>
+            )}
+
+            {stats.nbCredits >= 5 && (
+              <Card style={styles.insightCard}>
+                <CardContent style={styles.insightContent}>
+                  <View style={[styles.insightIcon, { backgroundColor: '#FFA72620' }]}>
+                    <Ionicons name="people" size={24} color="#FFA726" />
+                  </View>
+                  <View style={styles.insightText}>
+                    <Text style={styles.insightTitle}>📊 Beaucoup de crédits</Text>
+                    <Text style={styles.insightDescription}>
+                      {stats.nbCredits} clients ont des crédits actifs. 
+                      Utilisez les rappels WhatsApp.
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.insightButton}
+                    onPress={() => navigation.navigate('WhatsApp' as never)}
+                  >
+                    <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+                  </TouchableOpacity>
+                </CardContent>
+              </Card>
+            )}
+
+            {stats.monthlyTotal > 0 && stats.progressionObjectif < 30 && (
+              <Card style={styles.insightCard}>
+                <CardContent style={styles.insightContent}>
+                  <View style={[styles.insightIcon, { backgroundColor: '#2196F320' }]}>
+                    <Ionicons name="trending-up" size={24} color="#2196F3" />
+                  </View>
+                  <View style={styles.insightText}>
+                    <Text style={styles.insightTitle}>🚀 Boost nécessaire</Text>
+                    <Text style={styles.insightDescription}>
+                      Vous êtes à {stats.progressionObjectif.toFixed(0)}% de votre objectif mensuel. 
+                      Continuez vos efforts!
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.insightButton}
+                    onPress={handleNouvelleVente}
+                  >
+                    <Ionicons name="add-circle" size={20} color={Colors.primary} />
+                  </TouchableOpacity>
+                </CardContent>
+              </Card>
+            )}
+          </Animated.View>
+        )}
 
         {/* Dernières Ventes */}
         <View style={styles.recentSection}>
@@ -422,7 +811,7 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8F9FA',
   },
   content: {
     paddingBottom: 100,
@@ -431,31 +820,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 32,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingBottom: 40,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     position: 'relative',
     overflow: 'hidden',
   },
   headerBgEffect1: {
     position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 160,
-    height: 160,
-    backgroundColor: Colors.primary,
-    borderRadius: 80,
-    opacity: 0.1,
+    top: -60,
+    right: -60,
+    width: 200,
+    height: 200,
+    backgroundColor: 'rgba(255, 215, 0, 0.08)',
+    borderRadius: 100,
   },
   headerBgEffect2: {
     position: 'absolute',
-    bottom: -30,
-    left: -30,
-    width: 128,
-    height: 128,
-    backgroundColor: Colors.accent,
-    borderRadius: 64,
-    opacity: 0.1,
+    bottom: -40,
+    left: -40,
+    width: 160,
+    height: 160,
+    backgroundColor: 'rgba(139, 195, 74, 0.08)',
+    borderRadius: 80,
   },
   headerContent: {
     gap: 20,
@@ -466,94 +853,107 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: Colors.white,
     marginBottom: 4,
   },
   date: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.75)',
   },
   headerIcon: {
-    width: 56,
-    height: 56,
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
+    width: 52,
+    height: 52,
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.2)',
   },
   headerEmoji: {
-    fontSize: 28,
+    fontSize: 26,
   },
   headerStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14,
     padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerStatItem: {
     alignItems: 'center',
     flex: 1,
   },
   headerStatValue: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: Colors.white,
-    marginTop: 4,
+    marginTop: 6,
   },
   headerStatLabel: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.65)',
+    marginTop: 4,
   },
   headerStatDivider: {
     width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    marginHorizontal: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginHorizontal: 12,
   },
   kpisContainer: {
     paddingHorizontal: 16,
-    marginTop: -16,
+    marginTop: -20,
     gap: 12,
   },
   kpiCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     overflow: 'hidden',
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   kpiCardPrimary: {
-    backgroundColor: '#FFFBF0',
-    borderWidth: 2,
-    borderColor: Colors.primary,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.2)',
   },
   kpiCardSuccess: {
-    backgroundColor: '#F1F8E9',
+    backgroundColor: Colors.white,
   },
   kpiCardSecondary: {
-    backgroundColor: '#E0F2F1',
+    backgroundColor: Colors.white,
   },
   kpiCardInfo: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: Colors.white,
   },
   kpiCardWarning: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: Colors.white,
   },
   kpiCardNeutral: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: Colors.white,
   },
   kpiContent: {
-    padding: 16,
+    padding: 18,
   },
   kpiHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
   kpiIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -566,11 +966,11 @@ const styles = StyleSheet.create({
   kpiLabel: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginBottom: 4,
+    marginBottom: 6,
     fontWeight: '500',
   },
   kpiValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
   },
   kpiGrid: {
@@ -580,15 +980,24 @@ const styles = StyleSheet.create({
   },
   kpiCardSmall: {
     borderRadius: 16,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   kpiContentSmall: {
-    padding: 14,
+    padding: 16,
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   kpiIconSmall: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -607,10 +1016,10 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
     color: Colors.secondary,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -619,17 +1028,23 @@ const styles = StyleSheet.create({
   actionCard: {
     flex: 1,
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 16,
     alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   actionIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -647,7 +1062,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   sectionLink: {
     fontSize: 14,
@@ -656,6 +1071,7 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     borderRadius: 16,
+    backgroundColor: Colors.white,
   },
   emptyContent: {
     padding: 40,
@@ -689,11 +1105,20 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   venteCard: {
-    marginBottom: 12,
-    borderRadius: 16,
+    marginBottom: 10,
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   venteContent: {
-    padding: 12,
+    padding: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -705,9 +1130,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   venteIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -718,7 +1143,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: Colors.secondary,
-    marginBottom: 2,
+    marginBottom: 3,
   },
   venteDate: {
     fontSize: 12,
@@ -726,7 +1151,7 @@ const styles = StyleSheet.create({
   },
   venteRight: {
     alignItems: 'flex-end',
-    gap: 4,
+    gap: 5,
   },
   venteMontant: {
     fontSize: 16,
@@ -734,8 +1159,8 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   venteStatutBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   venteStatutText: {
@@ -745,20 +1170,28 @@ const styles = StyleSheet.create({
   statusContainer: {
     marginHorizontal: 16,
     marginTop: 24,
-    backgroundColor: 'rgba(139, 195, 74, 0.1)',
-    borderRadius: 16,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(139, 195, 74, 0.2)',
+    borderColor: 'rgba(139, 195, 74, 0.15)',
+    shadowColor: Colors.accent,
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
   },
   statusDot: {
-    width: 12,
-    height: 12,
+    width: 10,
+    height: 10,
     backgroundColor: Colors.accent,
-    borderRadius: 6,
+    borderRadius: 5,
   },
   statusTitle: {
     fontSize: 14,
@@ -772,7 +1205,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8F9FA',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -781,12 +1214,279 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
     backgroundColor: Colors.white,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: Colors.secondary,
+  },
+  changeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  changeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  miniChart: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginTop: 14,
+    paddingHorizontal: 4,
+  },
+  miniChartBar: {
+    width: 6,
+    height: 40,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  miniChartBarFill: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 215, 0, 0.4)',
+    position: 'absolute',
+    bottom: 0,
+    borderRadius: 3,
+  },
+  objectifSection: {
+    paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  objectifCard: {
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  objectifContent: {
+    padding: 18,
+  },
+  objectifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  objectifIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+  },
+  objectifTextContainer: {
+    flex: 1,
+  },
+  objectifTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.secondary,
+    marginBottom: 4,
+  },
+  objectifSubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  progressContainer: {
+    marginTop: 14,
+  },
+  progressBarBg: {
+    width: '100%',
+    height: 8,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  objectifStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  objectifStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  objectifStatLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  objectifStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  objectifStatDivider: {
+    width: 1,
+    backgroundColor: '#F0F0F0',
+    marginHorizontal: 12,
+  },
+  vipSection: {
+    paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  vipCard: {
+    borderRadius: 14,
+    marginBottom: 10,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  vipContent: {
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  vipLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  vipRank: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  vipRankEmoji: {
+    fontSize: 20,
+  },
+  vipAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vipAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  vipInfo: {
+    flex: 1,
+  },
+  vipName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.secondary,
+    marginBottom: 3,
+  },
+  vipStats: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  vipBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vipRight: {
+    alignItems: 'flex-end',
+    gap: 5,
+  },
+  vipTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.secondary,
+  },
+  vipLevelBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  vipLevelText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  insightsSection: {
+    paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  insightCard: {
+    borderRadius: 14,
+    marginBottom: 10,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  insightContent: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  insightIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  insightText: {
+    flex: 1,
+  },
+  insightTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.secondary,
+    marginBottom: 4,
+  },
+  insightDescription: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 18,
+  },
+  insightButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
   },
 });

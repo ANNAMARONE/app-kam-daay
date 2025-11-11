@@ -122,7 +122,7 @@ export default function Dashboard() {
     // Dernières ventes
     const recentVentes = [...ventes]
       .sort((a, b) => b.date - a.date)
-      .slice(0, 5);
+      .slice(0, 2); // Limité à 2 ventes les plus récentes
 
     // Objectif mensuel (fixe à 500,000 CFA pour l'exemple)
     const objectifMensuel = 500000;
@@ -191,7 +191,7 @@ export default function Dashboard() {
   };
 
   const handleVoirToutVentes = () => {
-    navigation.navigate('Ventes' as never);
+    navigation.navigate('HistoriqueVentes' as never);
   };
 
   return (
@@ -400,6 +400,38 @@ export default function Dashboard() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Assistant IA - Nouveau */}
+        <Animated.View 
+          style={[
+            styles.aiAssistantSection,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            }
+          ]}
+        >
+          <TouchableOpacity 
+            style={styles.aiAssistantCard}
+            onPress={() => navigation.navigate('AIAssistant' as never)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.aiAssistantGradient}>
+              <View style={styles.aiAssistantContent}>
+                <View style={styles.aiAssistantIcon}>
+                  <Text style={styles.aiAssistantEmoji}>🤖</Text>
+                </View>
+                <View style={styles.aiAssistantText}>
+                  <Text style={styles.aiAssistantTitle}>Assistant IA</Text>
+                  <Text style={styles.aiAssistantSubtitle}>
+                    Conseils intelligents · Relances · Analyse de risques
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={Colors.white} />
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
 
         {/* Actions Rapides */}
         <Animated.View 
@@ -1488,5 +1520,57 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
+  },
+  aiAssistantSection: {
+    paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  aiAssistantCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: Colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  aiAssistantGradient: {
+    width: '100%',
+    backgroundColor: Colors.secondary,
+    borderRadius: 16,
+    padding: 18,
+  },
+  aiAssistantContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  aiAssistantIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+  },
+  aiAssistantEmoji: {
+    fontSize: 28,
+  },
+  aiAssistantText: {
+    flex: 1,
+  },
+  aiAssistantTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.white,
+    marginBottom: 4,
+  },
+  aiAssistantSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.75)',
+    lineHeight: 18,
   },
 });

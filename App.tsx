@@ -21,11 +21,16 @@ import StatistiquesPage from './src/components/StatistiquesPage';
 import DepensesPage from './src/components/DepensesPage';
 import RappelsPage from './src/components/RappelsPage';
 import ParametresPage from './src/components/ParametresPage';
+import AIAssistant from './src/components/AIAssistant';
 import WelcomeScreen from './src/components/WelcomeScreen';
 import LoginScreen from './src/components/LoginScreen';
 import SignupScreen from './src/components/SignupScreen';
 import NetworkDebugScreen from './src/components/NetworkDebugScreen';
 import BackgroundSync from './src/components/BackgroundSync';
+import FloatingVoiceButton from './src/components/FloatingVoiceButton';
+import HistoriqueVentes from './src/components/HistoriqueVentes';
+import DetailVente from './src/components/DetailVente';
+
 
 const Tab = createBottomTabNavigator();
 
@@ -64,6 +69,12 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
       icon: 'settings', 
       description: 'Configuration de l\'app',
       color: '#666666' 
+    },
+    { 
+      name: 'AIAssistant', 
+      icon: 'robot', 
+      description: 'Assistant IA',
+      color: '#4CAF50' 
     },
   ];
 
@@ -370,7 +381,7 @@ function AppContent() {
                     styles.tabIconWrapper,
                     focused && styles.tabIconWrapperActive
                   ]}>
-                    <Ionicons name={iconName} size={size} color={color} />
+                    <Ionicons name={iconName} size={26} color={color} />
                     {route.name === 'Menu' && rappelsActifs > 0 && (
                       <View style={styles.badge}>
                         <Text style={styles.badgeText}>
@@ -385,27 +396,27 @@ function AppContent() {
             tabBarActiveTintColor: Colors.primary,
             tabBarInactiveTintColor: Colors.grayDark,
             tabBarStyle: {
-              height: 64 + insets.bottom, // Hauteur fixe + safe area
-              paddingBottom: insets.bottom > 0 ? insets.bottom : 8, // Safe area ou padding par défaut
-              paddingTop: 8,
-              backgroundColor: 'rgba(255, 255, 255, 0.98)',
-              borderTopWidth: 1,
-              borderTopColor: 'rgba(0, 77, 64, 0.1)',
+              height: 70 + insets.bottom,
+              paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+              paddingTop: 10,
+              paddingHorizontal: 8,
+              backgroundColor: Colors.white,
+              borderTopWidth: 0,
               shadowColor: Colors.black,
               shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 12,
-              elevation: 8,
+              shadowOpacity: 0.12,
+              shadowRadius: 16,
+              elevation: 12,
             },
             tabBarLabelStyle: {
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: '600',
-              marginTop: 2,
+              marginTop: 4,
               marginBottom: 0,
             },
             tabBarItemStyle: {
-              paddingVertical: 4,
-              paddingHorizontal: 4, // Plus d'espace horizontal entre les icônes
+              paddingVertical: 6,
+              paddingHorizontal: 0,
             },
             headerStyle: {
               backgroundColor: Colors.secondary,
@@ -486,7 +497,34 @@ function AppContent() {
               tabBarButton: () => null,
             }}
           />
+          <Tab.Screen
+            name="AIAssistant"
+            component={AIAssistant}
+            options={{ 
+              title: 'Assistant IA',
+              tabBarButton: () => null,
+            }}
+          />
+          <Tab.Screen
+            name="HistoriqueVentes"
+            component={HistoriqueVentes}
+            options={{ 
+              title: 'Historique des Ventes',
+              tabBarButton: () => null,
+            }}
+          />
+          <Tab.Screen
+            name="DetailVente"
+            component={DetailVente}
+            options={{ 
+              title: 'Détail de la Vente',
+              tabBarButton: () => null,
+            }}
+          />
         </Tab.Navigator>
+        
+        {/* Bouton Flottant Assistant Vocal - À l'intérieur de NavigationContainer */}
+        <FloatingVoiceButton />
       </NavigationContainer>
 
       {/* Menu Burger */}

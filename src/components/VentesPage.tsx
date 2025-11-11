@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
+import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 
 import { useStore } from '../lib/store';
 import { Card, CardContent } from './ui/Card';
@@ -14,6 +15,68 @@ import Colors from '../constants/Colors';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { Article } from '../lib/database';
 import { Calculatrice } from './Calculatrice';
+
+
+// 🎨 Composants logos SVG
+const WaveLogo = ({ size = 40 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 100 100">
+    <Circle cx="50" cy="50" r="48" fill="#00D4FF" />
+    <Path
+      d="M25 50 Q 35 35, 45 50 T 65 50 T 85 50"
+      stroke="white"
+      strokeWidth="8"
+      fill="none"
+      strokeLinecap="round"
+    />
+    <Path
+      d="M25 65 Q 35 50, 45 65 T 65 65 T 85 65"
+      stroke="white"
+      strokeWidth="6"
+      fill="none"
+      strokeLinecap="round"
+      opacity="0.7"
+    />
+  </Svg>
+);
+
+const OrangeMoneyLogo = ({ size = 40 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 100 100">
+    <Circle cx="50" cy="50" r="48" fill="#FF8500" />
+    <Circle cx="50" cy="50" r="28" fill="white" />
+    <G transform="translate(50, 50)">
+      <Path
+        d="M-10,-5 L10,-5 L10,15 L-10,15 Z"
+        fill="#FF8500"
+      />
+      <Path
+        d="M-5,-10 L5,-10 L5,10 L-5,10 Z"
+        fill="#FF8500"
+      />
+    </G>
+  </Svg>
+);
+
+const FreeMoneyLogo = ({ size = 40 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 100 100">
+    <Rect width="100" height="100" rx="20" fill="#0066CC" />
+    <Rect x="30" y="20" width="40" height="60" rx="8" fill="white" />
+    <Rect x="35" y="25" width="30" height="35" rx="4" fill="#0066CC" />
+    <Circle cx="50" cy="72" r="3" fill="#0066CC" />
+  </Svg>
+);
+
+const CashLogo = ({ size = 40 }: { size?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 100 100">
+    <Rect width="100" height="100" rx="20" fill="#4CAF50" />
+    <Rect x="15" y="35" width="70" height="30" rx="5" fill="white" />
+    <Circle cx="50" cy="50" r="10" fill="#4CAF50" />
+    <Path
+      d="M30 40 L30 35 M40 40 L40 35 M60 40 L60 35 M70 40 L70 35"
+      stroke="#4CAF50"
+      strokeWidth="3"
+    />
+  </Svg>
+);
 
 export default function VentesPage() {
   const navigation = useNavigation();
@@ -26,6 +89,10 @@ export default function VentesPage() {
   const [montantPaye, setMontantPaye] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
   const [calculatorTarget, setCalculatorTarget] = useState<{ type: 'article' | 'paiement', index?: number } | null>(null);
+  
+  // 💰 Méthodes de paiement mobile - Ajout
+  const [methodePaiement, setMethodePaiement] = useState<'especes' | 'wave' | 'orange_money' | 'free_money'>('especes');
+  const [numeroTelPaiement, setNumeroTelPaiement] = useState('');
 
   // Clients récents (les 5 derniers utilisés)
   const recentClients = useMemo(() => {
@@ -169,6 +236,11 @@ export default function VentesPage() {
 
   const selectRecentClient = (clientId: number) => {
     setSelectedClientId(clientId.toString());
+    // 📞 Auto-remplir le numéro de téléphone du client
+    const client = clients.find(c => c.id === clientId);
+    if (client?.telephone) {
+      setNumeroTelPaiement(client.telephone);
+    }
   };
 
   const getClientName = (clientId: number) => {
@@ -180,7 +252,7 @@ export default function VentesPage() {
   const reste = statut === 'Crédit' ? total : total - (parseFloat(montantPaye) || 0);
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerBgEffect} />
@@ -255,7 +327,14 @@ export default function VentesPage() {
             <Select
               label="Sélectionner un client *"
               value={selectedClientId}
-              onChange={setSelectedClientId}
+              onChange={(value) => {
+                setSelectedClientId(value);
+                // 📞 Auto-remplir le numéro de téléphone du client
+                const client = clients.find(c => c.id?.toString() === value);
+                if (client?.telephone) {
+                  setNumeroTelPaiement(client.telephone);
+                }
+              }}
               options={clientOptions}
               placeholder="Choisir un client"
             />
@@ -312,7 +391,7 @@ export default function VentesPage() {
 
                   <View style={styles.halfInput}>
                     <Input
-                      label="Prix Unitaire"
+                      label="Prix Unitaire (FCFA)"
                       placeholder="0"
                       value={article.prixUnitaire.toString()}
                       onChangeText={(text) => updateArticle(index, 'prixUnitaire', parseFloat(text) || 0)}
@@ -409,6 +488,132 @@ export default function VentesPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* 💰 Méthodes de Paiement Mobile */}
+        {statut !== 'Crédit' && (
+          <Card style={styles.section}>
+            <CardContent style={styles.sectionContent}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="phone-portrait" size={20} color={Colors.primary} />
+                <Text style={styles.sectionTitle}>Méthode de Paiement 💳</Text>
+              </View>
+
+              {/* Options de paiement */}
+              <View style={styles.paymentOptionsGrid}>
+                {/* Espèces */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    methodePaiement === 'especes' && styles.paymentOptionActive
+                  ]}
+                  onPress={() => setMethodePaiement('especes')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.paymentIcon,
+                    { backgroundColor: '#4CAF5020' }
+                  ]}>
+                    <CashLogo size={32} />
+                  </View>
+                  <Text style={styles.paymentOptionLabel}>Espèces</Text>
+                  {methodePaiement === 'especes' && (
+                    <View style={styles.paymentCheckmark}>
+                      <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Wave */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    methodePaiement === 'wave' && styles.paymentOptionActive
+                  ]}
+                  onPress={() => setMethodePaiement('wave')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.paymentIcon,
+                    { backgroundColor: '#00D4FF20' }
+                  ]}>
+                    <WaveLogo size={32} />
+                  </View>
+                  <Text style={styles.paymentOptionLabel}>Wave</Text>
+                  {methodePaiement === 'wave' && (
+                    <View style={styles.paymentCheckmark}>
+                      <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Orange Money */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    methodePaiement === 'orange_money' && styles.paymentOptionActive
+                  ]}
+                  onPress={() => setMethodePaiement('orange_money')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.paymentIcon,
+                    { backgroundColor: '#FF850020' }
+                  ]}>
+                    <OrangeMoneyLogo size={32} />
+                  </View>
+                  <Text style={styles.paymentOptionLabel}>Orange Money</Text>
+                  {methodePaiement === 'orange_money' && (
+                    <View style={styles.paymentCheckmark}>
+                      <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Free Money */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentOption,
+                    methodePaiement === 'free_money' && styles.paymentOptionActive
+                  ]}
+                  onPress={() => setMethodePaiement('free_money')}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.paymentIcon,
+                    { backgroundColor: '#0066CC20' }
+                  ]}>
+                    <FreeMoneyLogo size={32} />
+                  </View>
+                  <Text style={styles.paymentOptionLabel}>Free Money</Text>
+                  {methodePaiement === 'free_money' && (
+                    <View style={styles.paymentCheckmark}>
+                      <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Champ numéro de téléphone si méthode mobile */}
+              {methodePaiement !== 'especes' && (
+                <View style={styles.phoneNumberSection}>
+                  <Input
+                    label={`Numéro ${methodePaiement === 'wave' ? 'Wave' : methodePaiement === 'orange_money' ? 'Orange Money' : 'Free Money'}`}
+                    placeholder="77 123 45 67"
+                    value={numeroTelPaiement}
+                    onChangeText={setNumeroTelPaiement}
+                    keyboardType="phone-pad"
+                  />
+                  <View style={styles.paymentInfo}>
+                    <Ionicons name="information-circle-outline" size={16} color={Colors.textSecondary} />
+                    <Text style={styles.paymentInfoText}>
+                      Le numéro du client pour recevoir le paiement
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Récapitulatif */}
         <Card style={[styles.section, styles.summaryCard]}>
@@ -529,7 +734,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingTop: 40,
+    paddingTop: 16,
     paddingBottom: 24,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
@@ -899,5 +1104,67 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: Colors.secondary,
+  },
+  paymentOptionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
+  },
+  paymentOption: {
+    width: '47%',
+    height: 110,
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  paymentOptionActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#FFFBF0',
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.15,
+    elevation: 6,
+    transform: [{ scale: 1.02 }],
+  },
+  paymentIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentOptionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  paymentCheckmark: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  phoneNumberSection: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  paymentInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  paymentInfoText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
 });

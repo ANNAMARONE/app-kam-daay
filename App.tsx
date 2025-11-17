@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -22,17 +23,17 @@ import DepensesPage from './src/components/DepensesPage';
 import RappelsPage from './src/components/RappelsPage';
 import ParametresPage from './src/components/ParametresPage';
 import AIAssistant from './src/components/AIAssistant';
+import HistoriqueVentes from './src/components/HistoriqueVentes';
+import DetailVente from './src/components/DetailVente';
 import WelcomeScreen from './src/components/WelcomeScreen';
 import LoginScreen from './src/components/LoginScreen';
 import SignupScreen from './src/components/SignupScreen';
 import NetworkDebugScreen from './src/components/NetworkDebugScreen';
 import BackgroundSync from './src/components/BackgroundSync';
 import FloatingVoiceButton from './src/components/FloatingVoiceButton';
-import HistoriqueVentes from './src/components/HistoriqueVentes';
-import DetailVente from './src/components/DetailVente';
-
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
 // Composant Menu Burger
 function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: { 
@@ -72,16 +73,15 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
     },
     { 
       name: 'AIAssistant', 
-      icon: 'robot', 
+      icon: 'chatbubble-ellipses', 
       description: 'Assistant IA',
       color: '#4CAF50' 
     },
   ];
 
-  // Calculer les hauteurs fixes
-  const headerHeight = 88; // hauteur du header
-  const footerHeight = 56; // hauteur du footer
-  const maxMenuHeight = screenHeight * 0.8; // 80% de l'écran
+  const headerHeight = 88;
+  const footerHeight = 56;
+  const maxMenuHeight = screenHeight * 0.8;
   const contentHeight = maxMenuHeight - headerHeight - footerHeight;
 
   return (
@@ -99,11 +99,8 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
         />
         <View style={[
           styles.menuContainer,
-          { 
-            maxHeight: maxMenuHeight,
-          }
+          { maxHeight: maxMenuHeight }
         ]}>
-          {/* Header */}
           <View style={styles.menuHeader}>
             <View style={styles.menuHeaderLeft}>
               <View style={styles.menuIcon}>
@@ -119,7 +116,6 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
             </TouchableOpacity>
           </View>
 
-          {/* Menu Items - ScrollView avec hauteur calculée */}
           <ScrollView 
             style={[styles.menuContent, { maxHeight: contentHeight }]}
             showsVerticalScrollIndicator={false}
@@ -161,7 +157,6 @@ function MenuBurger({ visible, onClose, onNavigate, rappelsActifs = 0 }: {
             ))}
           </ScrollView>
 
-          {/* Footer - Toujours visible en bas */}
           <View style={[
             styles.menuFooter,
             { paddingBottom: insets.bottom > 0 ? insets.bottom : 16 }
@@ -179,6 +174,112 @@ function MenuScreen() {
   return <View style={{ flex: 1, backgroundColor: Colors.white }} />;
 }
 
+// ✅ Tab Navigator avec SEULEMENT les 5 onglets visibles
+function MainTabs({ navigationRef, setMenuVisible, rappelsActifs }: any) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: any;
+
+          switch (route.name) {
+            case 'Dashboard':
+              iconName = focused ? 'home' : 'home-outline';
+              break;
+            case 'Clients':
+              iconName = focused ? 'people' : 'people-outline';
+              break;
+            case 'Ventes':
+              iconName = focused ? 'cart' : 'cart-outline';
+              break;
+            case 'Credits':
+              iconName = focused ? 'card' : 'card-outline';
+              break;
+            case 'Menu':
+              iconName = focused ? 'menu' : 'menu-outline';
+              break;
+            default:
+              iconName = 'home-outline';
+          }
+
+          return (
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name={iconName} size={26} color={color} />
+              {route.name === 'Menu' && rappelsActifs > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {rappelsActifs > 99 ? '99+' : String(rappelsActifs)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          );
+        },
+        tabBarActiveTintColor: Colors.primary,
+        tabBarInactiveTintColor: Colors.grayDark,
+        tabBarStyle: {
+          height: 70 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+          paddingTop: 10,
+          backgroundColor: Colors.white,
+          borderTopWidth: 0,
+          shadowColor: Colors.black,
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
+          elevation: 12,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: 4,
+          marginBottom: 0,
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          paddingVertical: 6,
+        },
+        headerShown: false,
+      })}
+    >
+      <Tab.Screen
+        name="Dashboard"
+        component={Dashboard}
+        options={{ title: 'Accueil' }}
+      />
+      <Tab.Screen
+        name="Clients"
+        component={ClientsList}
+        options={{ title: 'Clients' }}
+      />
+      <Tab.Screen
+        name="Ventes"
+        component={VentesPage}
+        options={{ title: 'Ventes' }}
+      />
+      <Tab.Screen
+        name="Credits"
+        component={CreditsPage}
+        options={{ title: 'Crédits' }}
+      />
+      <Tab.Screen
+        name="Menu"
+        component={MenuScreen}
+        options={{ title: 'Menu' }}
+        listeners={({ navigation: nav }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigationRef.current = nav;
+            setMenuVisible(true);
+          },
+        })}
+      />
+    </Tab.Navigator>
+  );
+}
+
 // Composant interne pour accéder aux Safe Area Insets
 function AppContent() {
   const [dbInitialized, setDbInitialized] = useState(false);
@@ -189,8 +290,7 @@ function AppContent() {
   const [authScreen, setAuthScreen] = useState<'welcome' | 'login' | 'signup' | 'debug'>('welcome');
   
   const { loadData, isLoading, rappels } = useStore();
-  const insets = useSafeAreaInsets();
-  
+
   const initializeDatabaseAndLoadData = useCallback(async () => {
     try {
       const dbInstance = await KameDaayDatabase.initialize();
@@ -203,14 +303,10 @@ function AppContent() {
   }, [loadData]);
 
   useEffect(() => {
-    // Vérifier l'authentification au démarrage
     const checkAuth = async () => {
       const isAuth = await syncService.isAuthenticated();
       setIsAuthenticated(isAuth);
       setAuthChecking(false);
-      
-      // Note: Ne pas démarrer la sync ici car la DB n'est pas encore initialisée
-      // La sync sera démarrée après l'initialisation de la DB
     };
     
     checkAuth();
@@ -222,25 +318,19 @@ function AppContent() {
     }
   }, [dbInitialized, isAuthenticated, initializeDatabaseAndLoadData]);
 
-  // Démarrer la sync automatique et synchroniser après initialisation DB
   useEffect(() => {
     if (dbInitialized && isAuthenticated) {
       console.log('✅ DB initialisée, démarrage de la synchronisation automatique...');
       
-      // Démarrer la synchronisation automatique (toutes les 5 minutes)
       syncService.startAutoSync(5);
       
-      // Synchroniser immédiatement (petite attente pour laisser l'UI se charger)
       const timer = setTimeout(async () => {
         console.log('🔄 Téléchargement des données du serveur au démarrage...');
-        // Au démarrage, SEULEMENT télécharger du serveur (pas d'upload automatique)
-        // L'upload se fera automatiquement quand il y aura des modifications locales
         await syncService.syncFromServer();
       }, 2000);
       
       return () => {
         clearTimeout(timer);
-        // Arrêter la sync auto si le composant est démonté
         syncService.stopAutoSync();
       };
     }
@@ -249,15 +339,8 @@ function AppContent() {
   const handleAuthSuccess = async (token: string, user: any, isNewAccount: boolean = false) => {
     await syncService.setAccessToken(token);
     setIsAuthenticated(true);
-    
-    // Note: La synchronisation automatique sera démarrée automatiquement
-    // après l'initialisation de la DB (voir useEffect ci-dessus)
-    
-    // La sync sera aussi effectuée automatiquement après init DB
-    // Pas besoin de la déclencher ici pour éviter "DB non initialisée"
   };
 
-  // Vérification de l'authentification
   if (authChecking) {
     return (
       <View style={styles.loadingContainer}>
@@ -276,7 +359,6 @@ function AppContent() {
     );
   }
 
-  // Écrans d'authentification
   if (!isAuthenticated) {
     if (authScreen === 'welcome') {
       return (
@@ -309,23 +391,19 @@ function AppContent() {
     }
   }
 
-  // Chargement des données
   if (!dbInitialized || isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
-          {/* Double spinner */}
           <View style={styles.spinnerContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
             <View style={styles.spinnerPulse} />
           </View>
           
-          {/* Logo */}
           <View style={styles.logoContainer}>
             <Text style={styles.logoEmoji}>💼</Text>
           </View>
           
-          {/* Texte */}
           <Text style={styles.loadingTitle}>Kame Daay</Text>
           <Text style={styles.loadingSubtitle}>
             {dbInitialized ? 'Chargement de vos données...' : 'Initialisation de la base de données...'}
@@ -337,6 +415,7 @@ function AppContent() {
 
   const rappelsActifs = (rappels || []).filter(r => !r.resolu).length;
 
+  // ✅ Navigation directe vers les écrans du Stack
   const handleNavigateFromMenu = (screenName: string) => {
     if (navigationRef.current) {
       navigationRef.current.navigate(screenName);
@@ -346,188 +425,62 @@ function AppContent() {
   return (
     <>
       <NavigationContainer ref={navigationRef}>
-        {/* Synchronisation automatique en arrière-plan */}
         <BackgroundSync />
-      
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-            tabBarIcon: ({ focused, color, size }) => {
-              let iconName: keyof typeof Ionicons.glyphMap;
-
-              switch (route.name) {
-                case 'Dashboard':
-                  iconName = focused ? 'home' : 'home-outline';
-                  break;
-                case 'Clients':
-                  iconName = focused ? 'people' : 'people-outline';
-                  break;
-                case 'Ventes':
-                  iconName = focused ? 'cart' : 'cart-outline';
-                  break;
-                case 'Credits':
-                  iconName = focused ? 'card' : 'card-outline';
-                  break;
-                case 'Menu':
-                  iconName = focused ? 'menu' : 'menu-outline';
-                  break;
-                default:
-                  iconName = 'home-outline';
-              }
-
-              return (
-                <View style={styles.tabIconContainer}>
-                  {focused && <View style={styles.tabIndicator} />}
-                  <View style={[
-                    styles.tabIconWrapper,
-                    focused && styles.tabIconWrapperActive
-                  ]}>
-                    <Ionicons name={iconName} size={26} color={color} />
-                    {route.name === 'Menu' && rappelsActifs > 0 && (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>
-                          {rappelsActifs > 99 ? '99+' : String(rappelsActifs)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            },
-            tabBarActiveTintColor: Colors.primary,
-            tabBarInactiveTintColor: Colors.grayDark,
-            tabBarStyle: {
-              height: 70 + insets.bottom,
-              paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
-              paddingTop: 10,
-              paddingHorizontal: 8,
-              backgroundColor: Colors.white,
-              borderTopWidth: 0,
-              shadowColor: Colors.black,
-              shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: 0.12,
-              shadowRadius: 16,
-              elevation: 12,
-            },
-            tabBarLabelStyle: {
-              fontSize: 12,
-              fontWeight: '600',
-              marginTop: 4,
-              marginBottom: 0,
-            },
-            tabBarItemStyle: {
-              paddingVertical: 6,
-              paddingHorizontal: 0,
-            },
-            headerStyle: {
-              backgroundColor: Colors.secondary,
-              elevation: 0,
-              shadowOpacity: 0,
-            },
-            headerTintColor: Colors.white,
-            headerTitleStyle: {
-              fontWeight: '600',
-              fontSize: 18,
-            },
-            headerShown: false,
-          })}
-      >
-          <Tab.Screen
-            name="Dashboard"
-            component={Dashboard}
-            options={{ title: 'Accueil' }}
-          />
-          <Tab.Screen
-            name="Clients"
-            component={ClientsList}
-            options={{ title: 'Clients' }}
-          />
-          <Tab.Screen
-            name="Ventes"
-            component={VentesPage}
-            options={{ title: 'Ventes' }}
-          />
-          <Tab.Screen
-            name="Credits"
-            component={CreditsPage}
-            options={{ title: 'Crédits' }}
-          />
-          <Tab.Screen
-            name="Menu"
-            component={MenuScreen}
-            options={{ title: 'Menu' }}
-            listeners={({ navigation: nav }) => ({
-              tabPress: (e) => {
-                e.preventDefault();
-                navigationRef.current = nav;
-                setMenuVisible(true);
-              },
-            })}
-          />
-          
-          {/* Écrans cachés de la navigation (accessibles via le menu) */}
-          <Tab.Screen
-            name="Statistiques"
-            component={StatistiquesPage}
-            options={{ 
-              title: 'Statistiques',
-              tabBarButton: () => null,
-            }}
-          />
-          <Tab.Screen
-            name="Depenses"
-            component={DepensesPage}
-            options={{ 
-              title: 'Dépenses',
-              tabBarButton: () => null,
-            }}
-          />
-          <Tab.Screen
-            name="Rappels"
-            component={RappelsPage}
-            options={{ 
-              title: 'Rappels',
-              tabBarButton: () => null,
-            }}
-          />
-          <Tab.Screen
-            name="Parametres"
-            component={ParametresPage}
-            options={{ 
-              title: 'Paramètres',
-              tabBarButton: () => null,
-            }}
-          />
-          <Tab.Screen
-            name="AIAssistant"
-            component={AIAssistant}
-            options={{ 
-              title: 'Assistant IA',
-              tabBarButton: () => null,
-            }}
-          />
-          <Tab.Screen
-            name="HistoriqueVentes"
-            component={HistoriqueVentes}
-            options={{ 
-              title: 'Historique des Ventes',
-              tabBarButton: () => null,
-            }}
-          />
-          <Tab.Screen
-            name="DetailVente"
-            component={DetailVente}
-            options={{ 
-              title: 'Détail de la Vente',
-              tabBarButton: () => null,
-            }}
-          />
-        </Tab.Navigator>
         
-        {/* Bouton Flottant Assistant Vocal - À l'intérieur de NavigationContainer */}
+        {/* ✅ Stack Navigator contenant les Tabs + écrans additionnels */}
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          {/* Écran principal avec les 5 tabs */}
+          <Stack.Screen name="MainTabs">
+            {() => (
+              <MainTabs 
+                navigationRef={navigationRef}
+                setMenuVisible={setMenuVisible}
+                rappelsActifs={rappelsActifs}
+              />
+            )}
+          </Stack.Screen>
+          
+          {/* ✅ Écrans additionnels (accessibles via Menu Burger) */}
+          <Stack.Screen 
+            name="Statistiques" 
+            component={StatistiquesPage}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="Depenses" 
+            component={DepensesPage}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="Rappels" 
+            component={RappelsPage}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="Parametres" 
+            component={ParametresPage}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="AIAssistant" 
+            component={AIAssistant}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="HistoriqueVentes" 
+            component={HistoriqueVentes}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="DetailVente" 
+            component={DetailVente}
+            options={{ headerShown: false }}
+          />
+        </Stack.Navigator>
+        
         <FloatingVoiceButton />
       </NavigationContainer>
 
-      {/* Menu Burger */}
       <MenuBurger
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
@@ -540,7 +493,6 @@ function AppContent() {
   );
 }
 
-// Composant principal App qui fournit le SafeAreaProvider
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -550,7 +502,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  // Loading Screen
   loadingContainer: {
     flex: 1,
     backgroundColor: Colors.secondary,
@@ -605,36 +556,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
   },
   
-  // Tab Bar
-  tabIconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    height: 48,
-    width: '100%',
-  },
-  tabIndicator: {
-    position: 'absolute',
-    top: -8,
-    width: 32,
-    height: 3,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  tabIconWrapper: {
-    padding: 8,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabIconWrapperActive: {
-    backgroundColor: 'rgba(255, 215, 0, 0.12)',
-  },
   badge: {
     position: 'absolute',
     top: -4,
@@ -647,13 +568,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
   },
+  
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
     color: Colors.white,
   },
 
-  // Menu Burger
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -714,9 +635,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  menuContent: {
-    // Pas de flex: 1 ici, la hauteur est contrôlée directement
-  },
+  menuContent: {},
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -731,9 +650,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
-  },
-  menuItemFirst: {
-    marginTop: 0,
   },
   menuItemIconContainer: {
     width: 48,

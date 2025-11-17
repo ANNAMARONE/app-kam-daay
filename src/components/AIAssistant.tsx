@@ -35,7 +35,7 @@ import {
 type TabType = 'coach' | 'previsions' | 'vip' | 'insights' | 'risques' | 'relances';
 
 export default function AIAssistant() {
-  const navigation = useNavigation();
+  const nav = useNavigation();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>('coach');
   const [loading, setLoading] = useState(true);
@@ -183,21 +183,19 @@ export default function AIAssistant() {
         <View style={styles.headerBgEffect2} />
         <View style={styles.headerContent}>
           <View style={styles.headerTop}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => nav.goBack()}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color={Colors.white} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>🤖 Assistant IA</Text>
             <View style={styles.headerIcon}>
               <Ionicons name="bulb" size={28} color={Colors.white} />
             </View>
-            <Text style={styles.headerTitle}>🤖 Assistant IA</Text>
           </View>
           <Text style={styles.headerSubtitle}>Insights intelligents • {vipScores.filter(v => v.tier === 'platine' || v.tier === 'or').length} clients VIP</Text>
-          
-          {/* Bouton refresh en absolu */}
-          <TouchableOpacity 
-            style={styles.refreshButtonHeader}
-            onPress={handleRefresh}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="refresh" size={24} color={Colors.white} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -710,22 +708,11 @@ const styles = StyleSheet.create({
   headerContent: {
     gap: 8,
   },
-  refreshButtonHeader: {
-    position: 'absolute',
-    top: 8,
-    right: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    justifyContent: 'space-between',
   },
   headerIcon: {
     width: 52,
@@ -744,6 +731,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: Colors.white,
+    flex: 1,
   },
   headerSubtitle: {
     fontSize: 14,
@@ -1386,5 +1374,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.white,
     letterSpacing: 0.3,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
 });

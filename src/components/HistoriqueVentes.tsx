@@ -9,8 +9,10 @@ import { Card, CardContent } from './ui/Card';
 import Colors from '../constants/Colors';
 import { formatCurrency, formatDate } from '../lib/utils';
 
-export default function HistoriqueVentes() {
-  const navigation = useNavigation();
+export default function HistoriqueVentes({ navigation }: { navigation?: any }) {
+  // Utiliser les props navigation si fournis, sinon useNavigation (pour compatibilité)
+  const navFromHook = useNavigation();
+  const nav = navigation || navFromHook;
   const { ventes, clients } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatut, setFilterStatut] = useState<'Tous' | 'Payé' | 'Crédit' | 'Partiel'>('Tous');
@@ -52,7 +54,7 @@ export default function HistoriqueVentes() {
   }, [ventesFiltered]);
 
   const handleVentePress = (venteId: number) => {
-    navigation.navigate('DetailVente' as never, { venteId } as never);
+    nav.navigate('DetailVente' as never, { venteId } as never);
   };
 
   return (
@@ -62,7 +64,7 @@ export default function HistoriqueVentes() {
         <View style={styles.headerBgEffect} />
         <View style={styles.headerContent}>
           <TouchableOpacity 
-            onPress={() => navigation.goBack()}
+            onPress={() => nav.goBack()}
             style={styles.backButton}
           >
             <Ionicons name="arrow-back" size={24} color={Colors.white} />
@@ -233,7 +235,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 70,
     paddingBottom: 24,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,

@@ -6,13 +6,17 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useStore } from '../lib/store';
+
 import { Card, CardContent } from './ui/Card';
 import Colors from '../constants/Colors';
 import { formatCurrency, formatDate, calculateDailyTotal, calculateWeeklyTotal } from '../lib/utils';
 import ClientForm from './ClientForm';
 
 export default function Dashboard() {
+  console.log('🏠 Dashboard: Rendu commencé');
   const navigation = useNavigation();
+  console.log('🏠 Dashboard: navigation =', navigation ? 'OK' : 'NULL');
+
   const { ventes, clients, paiements, loadData } = useStore();
   const [showClientModal, setShowClientModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -191,6 +195,7 @@ export default function Dashboard() {
   };
 
   const handleVoirToutVentes = () => {
+    // ✅ MODIFIÉ : Utiliser navigation au lieu de openOverlay
     navigation.navigate('HistoriqueVentes' as never);
   };
 
@@ -413,7 +418,7 @@ export default function Dashboard() {
         >
           <TouchableOpacity 
             style={styles.aiAssistantCard}
-            onPress={() => navigation.navigate('AIAssistant' as never)}
+            onPress={() => navigation.navigate('AIAssistant' as never)} // ✅ MODIFIÉ : Utiliser navigation
             activeOpacity={0.8}
           >
             <View style={styles.aiAssistantGradient}>

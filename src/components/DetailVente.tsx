@@ -9,9 +9,12 @@ import { Card, CardContent } from './ui/Card';
 import Colors from '../constants/Colors';
 import { formatCurrency, formatDate } from '../lib/utils';
 
-export default function DetailVente() {
-  const navigation = useNavigation();
+export default function DetailVente({ navigation }: { navigation?: any }) {
+  // Utiliser les props navigation si fournis, sinon useNavigation (pour compatibilité)
+  const navFromHook = useNavigation();
+  const nav = navigation || navFromHook;
   const route = useRoute();
+  
   const { venteId } = (route.params as { venteId: number }) || {};
   
   const { ventes, clients } = useStore();
@@ -35,7 +38,7 @@ export default function DetailVente() {
           <Text style={styles.errorText}>Vente non trouvée</Text>
           <TouchableOpacity 
             style={styles.errorButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => nav.goBack()}
           >
             <Text style={styles.errorButtonText}>Retour</Text>
           </TouchableOpacity>
@@ -53,7 +56,7 @@ export default function DetailVente() {
         <View style={styles.headerBgEffect} />
         <View style={styles.headerContent}>
           <TouchableOpacity 
-            onPress={() => navigation.goBack()}
+            onPress={() => nav.goBack()}
             style={styles.backButton}
           >
             <Ionicons name="arrow-back" size={24} color={Colors.white} />

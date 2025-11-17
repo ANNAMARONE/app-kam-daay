@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useStore } from '../lib/store';
 import { Card, CardContent } from './ui/Card';
@@ -15,6 +17,8 @@ export default function ParametresPage() {
   const { clients, ventes, templates, addTemplate, deleteTemplate } = useStore();
   const [isExporting, setIsExporting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   const handleExportClients = async () => {
     try {
@@ -38,7 +42,7 @@ export default function ParametresPage() {
       const fileUri = FileSystem.documentDirectory + filename;
 
       await FileSystem.writeAsStringAsync(fileUri, csv, {
-        encoding: FileSystem.EncodingType.UTF8,
+        encoding: 'utf8',
       });
 
       const canShare = await Sharing.isAvailableAsync();
@@ -83,7 +87,7 @@ export default function ParametresPage() {
       const fileUri = FileSystem.documentDirectory + filename;
 
       await FileSystem.writeAsStringAsync(fileUri, csv, {
-        encoding: FileSystem.EncodingType.UTF8,
+        encoding: 'utf8',
       });
 
       const canShare = await Sharing.isAvailableAsync();
@@ -405,18 +409,35 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header avec Safe Area */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerBgEffect} />
+        <View style={styles.headerBgEffect2} />
         <View style={styles.headerContent}>
-          <View style={styles.headerIcon}>
-            <Ionicons name="settings" size={24} color={Colors.secondary} />
+          <View style={styles.headerTop}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color={Colors.white} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Paramètres</Text>
+            <View style={styles.headerIcon}>
+              <Ionicons name="settings" size={28} color={Colors.white} />
+            </View>
           </View>
-          <Text style={styles.headerTitle}>Paramètres</Text>
+          <Text style={styles.headerSubtitle}>Configuration et exports</Text>
         </View>
       </View>
 
-      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.contentContainer}>
+      <ScrollView 
+        style={styles.scrollContent} 
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + 100 }
+        ]}
+      >
         {/* Statistiques Générales */}
         <Card style={styles.statsCard}>
           <CardContent style={styles.statsContent}>
@@ -463,7 +484,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               onPress={handleShowDatabaseStats}
               variant="outline"
               fullWidth
-              icon={<Ionicons name="analytics" size={20} color={Colors.secondary} />}
+              icon="analytics"
               style={styles.exportButton}
             />
 
@@ -473,7 +494,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               variant="outline"
               fullWidth
               loading={isSyncing}
-              icon={<Ionicons name="trash" size={20} color={Colors.warning} />}
+              icon="trash"
               style={styles.exportButton}
             />
 
@@ -483,7 +504,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               variant="outline"
               fullWidth
               loading={isSyncing}
-              icon={<Ionicons name="cloud-upload" size={20} color={Colors.accent} />}
+              icon="cloud-upload"
               style={styles.exportButton}
             />
 
@@ -493,7 +514,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               variant="outline"
               fullWidth
               loading={isSyncing}
-              icon={<Ionicons name="cloud-download" size={20} color={Colors.accent} />}
+              icon="cloud-download"
               style={styles.exportButton}
             />
           </CardContent>
@@ -513,7 +534,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               variant="outline"
               fullWidth
               loading={isExporting}
-              icon={<Ionicons name="people" size={20} color={Colors.secondary} />}
+              icon="people"
               style={styles.exportButton}
             />
 
@@ -523,7 +544,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               variant="outline"
               fullWidth
               loading={isExporting}
-              icon={<Ionicons name="cart" size={20} color={Colors.secondary} />}
+              icon="cart"
               style={styles.exportButton}
             />
           </CardContent>
@@ -605,7 +626,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               variant="outline"
               fullWidth
               loading={isSyncing}
-              icon={<Ionicons name="phone-portrait" size={20} color={Colors.warning} />}
+              icon="phone-portrait"
               style={styles.exportButton}
             />
 
@@ -615,7 +636,7 @@ Cette action est IRRÉVERSIBLE et supprimera également les données du serveur 
               variant="outline"
               fullWidth
               loading={isSyncing}
-              icon={<Ionicons name="trash" size={20} color={Colors.error} />}
+              icon="trash"
               style={styles.dangerButton}
               textStyle={{ color: Colors.error }}
             />
@@ -633,41 +654,73 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: Colors.secondary,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 40,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     position: 'relative',
     overflow: 'hidden',
   },
   headerBgEffect: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 160,
-    height: 160,
+    top: -40,
+    right: -40,
+    width: 180,
+    height: 180,
     backgroundColor: Colors.primary,
-    borderRadius: 80,
-    opacity: 0.1,
+    borderRadius: 90,
+    opacity: 0.15,
+  },
+  headerBgEffect2: {
+    position: 'absolute',
+    bottom: -60,
+    left: -60,
+    width: 200,
+    height: 200,
+    backgroundColor: Colors.primary,
+    borderRadius: 100,
+    opacity: 0.08,
   },
   headerContent: {
+    gap: 8,
+  },
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerIcon: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
     backgroundColor: Colors.primary,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: Colors.white,
+    flex: 1,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginLeft: 52,
   },
   scrollContent: {
     flex: 1,

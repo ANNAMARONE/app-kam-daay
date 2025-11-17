@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { useStore } from '../lib/store';
 import { Card, CardContent } from './ui/Card';
@@ -14,6 +15,7 @@ type PeriodType = 'week' | 'month' | 'all';
 
 export default function StatistiquesPage() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { ventes, clients, depenses } = useStore();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('week');
 
@@ -121,10 +123,17 @@ export default function StatistiquesPage() {
         <View style={styles.headerBgEffect2} />
         <View style={styles.headerContent}>
           <View style={styles.headerTop}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color={Colors.white} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Statistiques</Text>
             <View style={styles.headerIcon}>
               <Ionicons name="bar-chart" size={28} color={Colors.white} />
             </View>
-            <Text style={styles.headerTitle}>Statistiques</Text>
           </View>
           <Text style={styles.headerSubtitle}>Analysez vos performances</Text>
         </View>
@@ -443,6 +452,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerIcon: {
     width: 52,
@@ -461,11 +479,12 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: Colors.white,
+    flex: 1,
   },
   headerSubtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.85)',
-    marginLeft: 64,
+    marginLeft: 52,
   },
 
   // ===== CONTENT =====

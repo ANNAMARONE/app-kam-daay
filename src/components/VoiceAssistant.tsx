@@ -21,7 +21,7 @@ import {
   detectLanguage,
   translateWolofToFrench,
   audioFeedback,
-} from '../lib/wolof-speech';
+} from './lib/wolof-speech';
 
 const { width, height } = Dimensions.get('window');
 

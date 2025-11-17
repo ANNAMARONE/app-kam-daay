@@ -34,10 +34,23 @@ export default function ClientsList() {
   // Calculer le solde crédit pour un client
   const getClientCredit = (clientId: number) => {
     const clientVentes = ventes.filter(v => v.clientId === clientId);
-    const totalVentes = clientVentes.reduce((sum, v) => sum + (v.total || 0), 0);
-    const clientPaiements = paiements.filter(p => p.clientId === clientId);
-    const totalPaiements = clientPaiements.reduce((sum, p) => sum + (p.montant || 0), 0);
-    return totalVentes - totalPaiements;
+    // Le crédit = somme des (total - montantPaye) pour chaque vente
+    const totalCredit = clientVentes.reduce((sum, v) => {
+      const reste = (v.total || 0) - (v.montantPaye || 0);
+      return sum + (reste > 0 ? reste : 0); // On n'additionne que si reste > 0
+    }, 0);
+    return totalCredit;
+  };
+
+  // Vérifier si un client est actif (a une vente dans les 30 derniers jours)
+  const isClientActive = (clientId: number) => {
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const clientVentes = ventes.filter(v => v.clientId === clientId);
+    
+    // Un client est actif s'il a au moins une vente dans les 30 derniers jours
+    const hasRecentVente = clientVentes.some(v => v.date >= thirtyDaysAgo);
+    
+    return hasRecentVente;
   };
 
   // Filtrer les clients selon l'onglet et la recherche
@@ -47,7 +60,7 @@ export default function ClientsList() {
                          client.telephone.includes(searchQuery);
     
     const credit = getClientCredit(client.id!);
-    const isActive = client.derniereVisite && (Date.now() - client.derniereVisite) < 30 * 24 * 60 * 60 * 1000;
+    const isActive = isClientActive(client.id!);
     
     switch (activeTab) {
       case 'actifs':
@@ -71,9 +84,7 @@ export default function ClientsList() {
   // Calculer les statistiques
   const getStatistics = () => {
     const totalClients = clients.length;
-    const clientsActifs = clients.filter(c => 
-      c.derniereVisite && (Date.now() - c.derniereVisite) < 30 * 24 * 60 * 60 * 1000
-    ).length;
+    const clientsActifs = clients.filter(c => isClientActive(c.id!)).length;
     const clientsAvecCredit = clients.filter(c => getClientCredit(c.id!) > 0).length;
     const clientsFideles = clients.filter(c => c.type === 'Fidèle').length;
 
@@ -125,7 +136,7 @@ export default function ClientsList() {
   const renderClient = ({ item }: { item: any }) => {
     const credit = getClientCredit(item.id!);
     const hasCredit = credit > 0;
-    const isActive = item.derniereVisite && (Date.now() - item.derniereVisite) < 30 * 24 * 60 * 60 * 1000;
+    const isActive = isClientActive(item.id!);
 
     return (
       <Card style={styles.clientCard}>

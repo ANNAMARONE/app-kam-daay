@@ -41,15 +41,15 @@ export default function ClientDetail({ client, onClose, onEdit }: ClientDetailPr
     const ventesDuClient = ventes.filter(v => v.clientId === client.id);
     setClientVentes(ventesDuClient.sort((a, b) => b.date - a.date));
 
-    // Calculer les totaux (utiliser 'total' au lieu de 'montantTotal')
+    // Calculer les totaux en utilisant montantPaye de chaque vente
     const total = ventesDuClient.reduce((sum, v) => sum + (v.total || 0), 0);
     setTotalVentes(total);
 
-    const paye = paiements
-      .filter(p => p.clientId === client.id)
-      .reduce((sum, p) => sum + (p.montant || 0), 0);
+    // Calculer le total payé à partir des ventes (montantPaye)
+    const paye = ventesDuClient.reduce((sum, v) => sum + (v.montantPaye || 0), 0);
     setTotalPaye(paye);
 
+    // Le crédit est la différence entre le total des ventes et le montant payé
     setCredit(total - paye);
   };
 
@@ -191,22 +191,31 @@ export default function ClientDetail({ client, onClose, onEdit }: ClientDetailPr
       <View style={styles.statsContainer}>
         <Card style={styles.statCard}>
           <CardContent style={styles.statContent}>
-            <Text style={styles.statLabel}>Ventes</Text>
+            <View style={[styles.statIconContainer, { backgroundColor: '#8BC34A20' }]}>
+              <Ionicons name="cart" size={28} color={Colors.accent} />
+            </View>
             <Text style={styles.statValue}>{clientVentes.length}</Text>
+            <Text style={styles.statLabel}>Ventes</Text>
           </CardContent>
         </Card>
         <Card style={styles.statCard}>
           <CardContent style={styles.statContent}>
-            <Text style={styles.statLabel}>Total</Text>
+            <View style={[styles.statIconContainer, { backgroundColor: '#FFD70020' }]}>
+              <Ionicons name="cash" size={28} color={Colors.primary} />
+            </View>
             <Text style={styles.statValue}>{formatCurrency(totalVentes)}</Text>
+            <Text style={styles.statLabel}>Total</Text>
           </CardContent>
         </Card>
         <Card style={[styles.statCard, credit > 0 && styles.statCardCredit]}>
           <CardContent style={styles.statContent}>
-            <Text style={styles.statLabel}>Crédit</Text>
+            <View style={[styles.statIconContainer, credit > 0 ? { backgroundColor: '#FF444420' } : { backgroundColor: '#E0E0E020' }]}>
+              <Ionicons name="card" size={28} color={credit > 0 ? Colors.error : Colors.grayDark} />
+            </View>
             <Text style={[styles.statValue, credit > 0 && styles.statValueCredit]}>
               {formatCurrency(credit)}
             </Text>
+            <Text style={styles.statLabel}>Crédit</Text>
           </CardContent>
         </Card>
       </View>
@@ -431,6 +440,14 @@ const styles = StyleSheet.create({
   statContent: {
     padding: 12,
     alignItems: 'center',
+  },
+  statIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   statLabel: {
     fontSize: 13,

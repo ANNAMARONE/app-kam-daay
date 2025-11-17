@@ -1,7 +1,3 @@
-/**
- * Service de Synchronisation - Kame Daay Mobile
- * Synchronise les données entre SQLite (mobile) et MySQL (serveur)
- */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
@@ -196,13 +192,13 @@ class SyncService {
         console.log('⚠️ Aucun paiement trouvé dans SQLite');
       }
 
-      // Log de TOUTES les ventes pour debug duplication
-      if (localData.ventes.length > 0) {
-        console.log('🔍 TOUTES les ventes locales (SQLite) :', localData.ventes.map(v => ({
-          id: v.id,
-          clientId: v.clientId,
-          total: v.total,
-          date: new Date(v.date).toLocaleString()
+      // Log de TOUS les paiements pour debug
+      if (localData.paiements.length > 0) {
+        console.log('🔍 TOUS les paiements locaux (SQLite) :', localData.paiements.map(p => ({
+          id: p.id,
+          venteId: p.venteId,
+          montant: p.montant,
+          date: new Date(p.date).toLocaleString()
         })));
       }
 
@@ -597,10 +593,46 @@ class SyncService {
         }
       }
       
-      // Paiements (temporairement ignorés car nécessitent un mapping vente UUID → ID local)
-      // TODO: Implémenter le mapping des ventes comme pour les clients
-      console.log(`  ⏭️ ${serverData.paiements?.length || 0} paiements ignorés (mapping non implémenté)`);
-      
+      // Paiements (avec mapping des UUIDs vers IDs locaux)
+      for (const serverPaiement of serverData.paiements || []) {
+        try {
+          // Vérifier si le paiement existe déjà localement via son UUID
+          const existingPaiementId = await db.getLocalIdFromUuid(serverPaiement.id, 'paiement');
+          
+          if (existingPaiementId) {
+            // Paiement existe déjà, on le passe
+            updatedCount++;
+            console.log(`  🔄 Paiement déjà existant (UUID): ${serverPaiement.montant} CFA (ignoré)`);
+            continue;
+          }
+          
+          // Récupérer l'ID local de la vente à partir de son UUID
+          const localVenteId = await db.getLocalIdFromUuid(serverPaiement.vente_id, 'vente');
+          
+          if (!localVenteId) {
+            console.warn(`  ⚠️ Vente UUID ${serverPaiement.vente_id} introuvable localement, paiement ignoré`);
+            continue;
+          }
+          
+          // Créer le paiement avec l'ID local de la vente
+          const paiement = {
+            venteId: localVenteId,
+            montant: serverPaiement.montant,
+            date: new Date(serverPaiement.date_paiement || Date.now()).getTime(),
+            methode: 'Espèces' as 'Espèces' | 'Mobile Money' | 'Virement' | 'Autre' // Valeur par défaut car MySQL n'a pas ce champ
+          };
+          
+          const localPaiementId = await db.addPaiement(paiement);
+          insertedCount++;
+          
+          // Sauvegarder le mapping UUID → ID local pour le paiement
+          await db.saveUuidMapping(serverPaiement.id, localPaiementId, 'paiement');
+          
+          console.log(`  ✅ Paiement ajouté: ${paiement.montant} CFA (vente locale #${localVenteId})`);
+        } catch (error) {
+          console.error(`  ❌ Erreur paiement:`, error);
+        }
+      }
       
       // Objectifs
       for (const objectif of localData.objectifs) {
@@ -624,9 +656,56 @@ class SyncService {
         }
       }
       
-      // Rappels (temporairement ignorés car nécessitent un mapping client/vente UUID → ID local)
-      // TODO: Implémenter le mapping des rappels comme pour les clients
-      console.log(`  ⏭️ ${serverData.rappels?.length || 0} rappels ignorés (mapping non implémenté)`);
+      // Rappels (avec mapping des UUIDs vers IDs locaux)
+      for (const serverRappel of serverData.rappels || []) {
+        try {
+          // Vérifier si le rappel existe déjà localement via son UUID
+          const existingRappelId = await db.getLocalIdFromUuid(serverRappel.id, 'rappel');
+          
+          if (existingRappelId) {
+            // Rappel existe déjà, on le passe
+            updatedCount++;
+            console.log(`  🔄 Rappel déjà existant (UUID): ignoré`);
+            continue;
+          }
+          
+          // Récupérer l'ID local du client à partir de son UUID
+          const localClientId = clientUuidToLocalId.get(serverRappel.client_id) || 
+                                await db.getLocalIdFromUuid(serverRappel.client_id, 'client');
+          
+          if (!localClientId) {
+            console.warn(`  ⚠️ Client UUID ${serverRappel.client_id} introuvable localement, rappel ignoré`);
+            continue;
+          }
+          
+          // Récupérer l'ID local de la vente à partir de son UUID
+          const localVenteId = await db.getLocalIdFromUuid(serverRappel.vente_id, 'vente');
+          
+          if (!localVenteId) {
+            console.warn(`  ⚠️ Vente UUID ${serverRappel.vente_id} introuvable localement, rappel ignoré`);
+            continue;
+          }
+          
+          // Créer le rappel avec les IDs locaux
+          const rappel = {
+            clientId: localClientId,
+            venteId: localVenteId,
+            message: serverRappel.message,
+            dateLimite: new Date(serverRappel.date_limite || Date.now()).getTime(),
+            resolu: serverRappel.resolu || false
+          };
+          
+          const localRappelId = await db.addRappel(rappel);
+          insertedCount++;
+          
+          // Sauvegarder le mapping UUID → ID local pour le rappel
+          await db.saveUuidMapping(serverRappel.id, localRappelId, 'rappel');
+          
+          console.log(`  ✅ Rappel ajouté (client local #${localClientId}, vente locale #${localVenteId})`);
+        } catch (error) {
+          console.error(`  ❌ Erreur rappel:`, error);
+        }
+      }
       
       console.log(`✅ Merge terminé: ${insertedCount} nouveaux, ${updatedCount} mis à jour`);
       

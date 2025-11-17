@@ -1,8 +1,9 @@
 
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
@@ -16,6 +17,7 @@ import { Select } from './ui/Select';
 import Colors from '../constants/Colors';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { Article } from '../lib/database';
+
 import { Calculatrice } from './Calculatrice';
 
 
@@ -96,6 +98,22 @@ export default function VentesPage() {
   const [methodePaiement, setMethodePaiement] = useState<'especes' | 'wave' | 'orange_money' | 'free_money'>('especes');
   const [numeroTelPaiement, setNumeroTelPaiement] = useState('');
 
+  // Calculer le total
+  const calculateTotal = () => {
+    return articles.reduce((sum, article) => {
+      return sum + (article.quantite * article.prixUnitaire);
+    }, 0);
+  };
+
+  const total = calculateTotal();
+
+  // Auto-remplir le montant payé quand le total change et que le statut est 'Payé'
+  useEffect(() => {
+    if (statut === 'Payé' && total > 0) {
+      setMontantPaye(total.toString());
+    }
+  }, [total, statut]);
+
   // Clients récents (les 5 derniers utilisés)
   const recentClients = useMemo(() => {
     const clientsWithVentes = clients.map(client => {
@@ -140,12 +158,6 @@ export default function VentesPage() {
     setArticles(newArticles);
   };
 
-  const calculateTotal = () => {
-    return articles.reduce((sum, article) => {
-      return sum + (article.quantite * article.prixUnitaire);
-    }, 0);
-  };
-
   const openCalculator = (type: 'article' | 'paiement', index?: number) => {
     setCalculatorTarget({ type, index });
     setShowCalculator(true);
@@ -185,7 +197,6 @@ export default function VentesPage() {
       return;
     }
 
-    const total = calculateTotal();
     const montant = parseFloat(montantPaye) || 0;
 
     if (statut === 'Payé' && montant < total) {
@@ -250,14 +261,13 @@ export default function VentesPage() {
     return client ? `${client.prenom} ${client.nom}` : 'Client inconnu';
   };
 
-  const total = calculateTotal();
   const reste = statut === 'Crédit' ? total : total - (parseFloat(montantPaye) || 0);
 
   const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Header avec Safe Area et effets */}
+      {/* Header avec Safe Area */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerBgEffect} />
         <View style={styles.headerBgEffect2} />
@@ -267,17 +277,14 @@ export default function VentesPage() {
               <Ionicons name="cart" size={28} color={Colors.white} />
             </View>
             <Text style={styles.headerTitle}>Nouvelle Vente</Text>
+            <TouchableOpacity 
+              onPress={() => (navigation as any).navigate('Clients', { openForm: true })} 
+              style={styles.addClientButton}
+            >
+              <Ionicons name="person-add" size={24} color={Colors.white} />
+            </TouchableOpacity>
           </View>
           <Text style={styles.headerSubtitle}>Enregistrer une transaction</Text>
-          
-          {/* Bouton retour en absolu */}
-          <TouchableOpacity 
-            style={styles.backButtonHeader}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="arrow-back" size={24} color={Colors.white} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -737,12 +744,11 @@ export default function VentesPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F5F7FA',
   },
   header: {
     backgroundColor: Colors.secondary,
     paddingHorizontal: 20,
-    paddingTop: 16,
     paddingBottom: 32,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
@@ -772,18 +778,6 @@ const styles = StyleSheet.create({
   headerContent: {
     gap: 8,
   },
-  backButtonHeader: {
-    position: 'absolute',
-    top: 8,
-    right: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -806,11 +800,20 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: Colors.white,
+    flex: 1,
   },
   headerSubtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.85)',
     marginLeft: 64,
+  },
+  addClientButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     flex: 1,

@@ -100,10 +100,13 @@ export default function Dashboard() {
     const totalCredits = totalVentes - totalPaiements - totalMontantPaye;
     const nbCredits = creditVentes.length;
 
-    // Clients actifs et VIP
-    const activeClients = clients.filter(c => 
-      c.derniereVisite && c.derniereVisite > thirtyDaysAgo
-    ).length;
+    // 🐛 FIX: Calculer les clients actifs basé sur les ventes des 30 derniers jours
+    const clientsWithRecentVentes = new Set(
+      ventes
+        .filter(v => v.date >= thirtyDaysAgo)
+        .map(v => v.clientId)
+    );
+    const activeClients = clientsWithRecentVentes.size;
 
     // Clients VIP (>3 ventes et total >50000 CFA)
     const clientsVIP = clients.filter(c => {

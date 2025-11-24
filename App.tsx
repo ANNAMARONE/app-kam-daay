@@ -30,7 +30,7 @@ import LoginScreen from './src/components/LoginScreen';
 import SignupScreen from './src/components/SignupScreen';
 import NetworkDebugScreen from './src/components/NetworkDebugScreen';
 import BackgroundSync from './src/components/BackgroundSync';
-import FloatingVoiceButton from './src/components/FloatingVoiceButton';
+
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -478,7 +478,7 @@ function AppContent() {
           />
         </Stack.Navigator>
         
-        <FloatingVoiceButton />
+     
       </NavigationContainer>
 
       <MenuBurger

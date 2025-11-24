@@ -25,7 +25,7 @@ export default function CreditsPage() {
   const getTotalCredit = () => {
     return ventesAvecCredit.reduce((total, vente) => {
       const paiementsVente = paiements.filter(p => p.venteId === vente.id);
-      const totalPaye = paiementsVente.reduce((sum, p) => sum + p.montant, 0) + vente.montantPaye;
+      const totalPaye = paiementsVente.reduce((sum, p) => sum + p.montant, 0);
       const reste = vente.total - totalPaye;
       return total + reste;
     }, 0);
@@ -33,7 +33,7 @@ export default function CreditsPage() {
 
   const getResteAPayer = (vente: any) => {
     const paiementsVente = paiements.filter(p => p.venteId === vente.id);
-    const totalPaye = paiementsVente.reduce((sum, p) => sum + p.montant, 0) + vente.montantPaye;
+    const totalPaye = paiementsVente.reduce((sum, p) => sum + p.montant, 0);
     return vente.total - totalPaye;
   };
 
